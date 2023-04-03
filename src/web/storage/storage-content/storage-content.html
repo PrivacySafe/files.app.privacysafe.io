@@ -1,0 +1,98 @@
+<section class="storage-content">
+  
+  <div class="storage-content__title">
+    <div class="storage-content__col-01"></div>
+    <div class="storage-content__col-02" 
+      ng-click="$ctrl.sortingChange('name')">
+      Name
+      <ng-md-icon ng-if="$ctrl.sortingRule.field === 'name'" 
+        icon="arrow_{{$ctrl.sortingRule.order === '+' ? 'downward' : 'upwards'}}">
+      </ng-md-icon>
+    </div>
+    <div class="storage-content__col-03"
+      ng-click="$ctrl.sortingChange('type')">
+      Type
+      <ng-md-icon ng-if="$ctrl.sortingRule.field === 'type'" 
+        icon="arrow_{{$ctrl.sortingRule.order === '+' ? 'downward' : 'upwards'}}">
+      </ng-md-icon>
+    </div>
+    <div class="storage-content__col-04"
+      ng-click="$ctrl.sortingChange('owner')">
+      Owner
+      <ng-md-icon ng-if="$ctrl.sortingRule.field === 'owner'" 
+        icon="arrow_{{$ctrl.sortingRule.order === '+' ? 'downward' : 'upwards'}}">
+      </ng-md-icon>
+    </div>
+    <div class="storage-content__col-05"
+      ng-click="$ctrl.sortingChange('date')">
+      Date
+      <ng-md-icon ng-if="$ctrl.sortingRule.field === 'date'" 
+        icon="arrow_{{$ctrl.sortingRule.order === '+' ? 'downward' : 'upwards'}}">
+      </ng-md-icon>
+    </div>
+    <div class="storage-content__col-06"
+      ng-click="$ctrl.sortingChange('size')">
+      Size
+      <ng-md-icon ng-if="$ctrl.sortingRule.field === 'size'" 
+        icon="arrow_{{$ctrl.sortingRule.order === '+' ? 'downward' : 'upwards'}}">
+      </ng-md-icon>
+    </div>
+  </div>
+
+  <div class="storage-content__body">
+    <table>
+      <tr class="storage-content__item" 
+        ng-repeat="item in $ctrl.selectFolderContentsList track by $index" 
+        ng-class="{'storage-content__item-even': $even}"
+        ng-dblclick="$ctrl.openFolder(item)">
+        <td class="storage-content__col-01">
+          <ng-md-icon class="favorite"
+            data-field="favorite"
+            ng-if="$ctrl.isFolderFavoririte(item)"
+            icon="bookmark" size="18"
+            ng-click="$ctrl.favoritesControl([item], 'remove')">
+          </ng-md-icon>
+          <ng-md-icon class="no-favorite" 
+            data-field="favorite"
+            ng-if="!$ctrl.isFolderFavoririte(item) && item.type === 'folder'"
+            icon="bookmark_outline" size="18"
+            ng-click="$ctrl.favoritesControl([item], 'add')">
+          </ng-md-icon>
+        </td>
+        <td class="storage-content__col-02">
+          <ng-md-icon 
+            ng-if="!item.isSelected"
+            class="storage-contet__icon"
+            icon="{{item.type === 'file' ? 'subject' : (item.type === 'folder' ? 'folder' : 'link')}}"
+            options='{"duration": 50}'>
+          </ng-md-icon>
+          <ng-md-icon 
+            ng-if="!item.isSelected" 
+            icon="check_box_outline_blank"
+            class="storage-contet__checkbox"
+            ng-click="$ctrl.selectObj(item, $index)">
+          </ng-md-icon>
+          <ng-md-icon ng-if="item.isSelected"
+            icon="check_box"
+            class="storage-contet__checkbox-ok"
+            ng-click="$ctrl.selectObj(item, $index)">
+          </ng-md-icon>
+          <div class="text">{{item.name}}</div>
+        </td>
+        <td class="storage-content__col-03">
+          {{item.type}}
+        </td>
+        <td class="storage-content__col-04">
+          {{item.owner}}
+        </td>
+        <td class="storage-content__col-05">
+          {{item.date}}
+        </td>
+        <td class="storage-content__col-06">
+          {{item.size !== 0 ? $ctrl.getSize(item.size) : '-'}}
+        </td>
+      </tr>
+    </table>
+  </div>
+  
+</section>

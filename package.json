@@ -1,0 +1,33 @@
+{
+  "name": "files.app.privacysafe.io",
+  "version": "0.2.1",
+  "description": "Files in PrivacySafe (3NWeb app)",
+  "author": "3NSoft Inc.",
+  "license": "GPL-3.0",
+  "dependencies": {
+    "rxjs": "^5.3.0"
+  },
+  "devDependencies": {
+    "@types/jasmine": "^2.5.46",
+    "@types/node": "^8.0.0",
+    "@types/webdriverio": "",
+    "browser-sync": "2.11.1",
+    "browserify": "^13.0.0",
+    "del": "2.2.0",
+    "gulp": "^4.0.0",
+    "gulp-concat-css": "^3.1.0",
+    "gulp-sass": "4.1.0",
+    "gulp-rename": "^1.2.2",
+    "gulp-shell": "^0.6.5",
+    "gulp-sourcemaps": "^2.2.0",
+    "gulp-typescript": "^4.0.1",
+    "gulp-uglify": "^2.0.0",
+    "node-sass": "5.0.0",
+    "typescript": "^3.7.3",
+    "vinyl-buffer": "^1.0.1",
+    "vinyl-source-stream": "^2.0.0"
+  },
+  "scripts": {
+    "gulp": "./node_modules/.bin/gulp"
+  }
+}

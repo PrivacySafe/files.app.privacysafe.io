@@ -1,0 +1,23 @@
+<section class="storage-title">
+  <div class="storage-title__button">
+    <md-button ng-click="$ctrl.create()">
+      CREATE
+    </md-button>
+  </div>
+  <div class="storage-title__path">
+    <table>
+      <tbody>
+        <tr>
+          <td class="storage-title__path-item" ng-repeat="item in $ctrl.currentFolderPath">
+            <span class="storage-title__path-item-value" ng-click="$ctrl.goPath($index)">
+              {{$index !== 0 ? item : $ctrl.getBasePath()}}
+            </span>
+            <span ng-if="$index !== ($ctrl.currentFolderPath.length - 1)">
+              /
+            </span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>

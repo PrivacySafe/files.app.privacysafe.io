@@ -1,2 +1,1 @@
-# files.app.privacysafe.io
-File browser in PrivacySafe
+Storage app for 3NWeb platform.

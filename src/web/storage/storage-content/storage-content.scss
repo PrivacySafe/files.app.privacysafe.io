@@ -1,0 +1,218 @@
+@import '../../config';
+
+.storage-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+
+  &__title {
+    position: relative;
+    width: 100%;
+    height: 44px;
+    background-color: rgba(0, 0, 0, 0.32);
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: stretch;
+
+    div {
+      position: relative;
+      font-size: 16px;
+      color: $color01;
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      &:focus {
+        border: none;
+        outline-width: 0;
+      }
+
+      ng-md-icon {
+        width: 18px;
+        height: 18px;
+        margin: 0 0 0 8px;
+
+        svg {
+          width: 18px;
+          height: 18px;
+          fill: $color01;
+        }
+      }
+
+      &.storage-content__col-02 {
+        justify-content: flex-start;
+      }
+    }
+  }
+
+  &__body {
+    position: relative;
+    width: 100%;
+    height: calc(100% - 44px);
+    overflow-y: auto;
+
+    table {
+      position: relative;
+      width: 100%;
+      box-sizing: border-box;
+      border-collapse: collapse;
+    }
+  }
+
+  &__item {
+    position: relative;
+    box-sizing: border-box;
+    width: 100%;
+    height: 48px;
+    border: none;
+    outline-width: 0;
+    cursor: pointer;
+
+    &-even {
+      background-color: $color15;
+    }
+
+    &:hover {
+      td {
+        &.storage-content__col {
+          &-01 {
+            .no-favorite {
+              opacity: 1;
+            }
+          }
+          &-02 {
+            .storage-contet {
+              &__icon {
+                display: none;
+              }
+              &__checkbox {
+                display: inline-block;
+                svg {
+                  fill: $color04;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    td {
+      position: relative;
+      box-sizing: border-box;
+      font-size: 14px;
+      background-color: transparent;
+      user-select: none;
+
+      &.storage-content__col {
+        &-01 {
+          text-align: center;
+
+          ng-md-icon {
+            position: relative;
+            width: 18px;
+            height: 18px;
+            top: 2px;
+            margin: 0;
+            cursor: pointer;
+            outline-width: 0;
+
+            svg {
+              width: 18px;
+              height: 18px;
+            }
+          }
+          
+          .favorite {
+            svg {
+              fill: $color12;
+            }
+          }
+
+          .no-favorite {
+            opacity: 0;
+            svg {
+              fill: $color02;
+            }
+          }
+        }
+
+        &-03, &-04, &-05, &-06 {
+          text-align: center;
+          color: $color02;
+          font-style: italic;
+        }
+
+        &-02 {
+          color: $color01;
+
+          ng-md-icon {
+            width: 18px;
+            height: 18px;
+            margin: 0;
+            cursor: pointer;
+    
+            svg {
+              width: 18px;
+              height: 18px;
+              fill: $color01;
+            }
+          }
+
+          .storage-contet {
+            &__icon {
+              display: inline-block;
+            }
+            &__checkbox {
+              display: none;
+
+              &-ok {
+                svg {
+                  fill: $color04;
+                }
+              }
+            }
+          }
+
+          .text {
+            display: inline-block;
+            position: relative;
+            top: 4px;
+            width: calc(100% - 30px);
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            cursor: pointer;
+
+            &:hover {
+              color: $color12;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  &__col {
+    &-01 {
+      width: 22px;
+    }
+    &-02 {
+      width: calc(100% - 402px);
+    }
+    &-03 {
+      width: 95px;
+    }
+    &-04 {
+      width: 95px;
+    }
+    &-05 {
+      width: 95px;
+    }
+    &-06 {
+      width: 95px;
+    }
+  }
+}

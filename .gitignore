@@ -1,0 +1,10 @@
+/.idea
+/.vscode
+/.history
+/app
+/node_modules
+/temp
+/tests
+/npm-debug.log
+/test-runner
+/test-user-creds.json

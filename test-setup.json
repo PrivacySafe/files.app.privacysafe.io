@@ -1,0 +1,11 @@
+{
+  "apps": {
+    "files.app.privacysafe.io": {
+      "dir": "."
+    }
+  },
+  "users": [
+    {}
+  ],
+  "userCreds": "./test-user-creds.json"
+}

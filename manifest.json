@@ -1,0 +1,24 @@
+{
+  "name": "Files in PrivacySafe",
+  "appDomain": "files.app.privacysafe.io",
+	"version": "0.5.2",
+  "components": {
+    "/index.html": {
+      "startedBy": "user",
+      "runtime": "web-gui",
+      "capsRequested": {
+        "device": {
+          "fileDialog": "all"
+        },
+        "storage": {
+          "appFS": "default",
+          "userFS": "all",
+          "sysFS": "all"
+        },
+        "mailerid": true,
+        "log": "all"
+      }
+    }
+  }
+
+}

@@ -1,0 +1,11 @@
+<section class="storage-folder-list">
+  <div ng-repeat="folder in $ctrl.folders" 
+    class="storage-folder-list__item"
+    ng-class="{'storage-folder-list__item--select': folder.id === $ctrl.selectFolderId}"
+    ng-click="$ctrl.selectStorageFolder(folder)">
+    <ng-md-icon icon="{{folder.icon}}" size="18"></ng-md-icon>
+    <span class="storage-folder-list__item-name">
+      {{folder.name}}
+    </span>
+  </div>
+</section>

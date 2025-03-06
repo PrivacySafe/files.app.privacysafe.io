@@ -1,0 +1,283 @@
+<script lang="ts" setup>
+  import { computed, inject, ref, watch } from 'vue';
+  import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
+  import { Ui3nDropFiles, Ui3nIcon, Ui3nInputFile, Ui3nProgressLinear, Ui3nHtml } from '@v1nt1248/3nclient-lib';
+  import { getRandomId, getFileExtension, formatFileSize } from '@v1nt1248/3nclient-lib/utils';
+  import FileType from '@/components/common/file-type/file-type.vue';
+
+  const vUi3nHtml = Ui3nHtml;
+
+  const props = defineProps<{
+    currentFolder: string;
+  }>();
+
+  const currentFolderName = computed(() => props.currentFolder ? props.currentFolder.replaceAll('/', ' / ') : 'Home');
+
+  const files = ref<Record<string, File>>({});
+  const isUploading = ref(false);
+  const totalSize = ref<number>(0);
+  const progress = ref<Record<string, number>>({});
+  const uploadedSize = computed(() => Object.keys(progress.value).reduce((acc, id) => {
+    const fileSize = files.value[id].size;
+    const fileProgress = progress.value[id];
+    const uploadedFileSize = fileSize * fileProgress / 100;
+    acc += uploadedFileSize;
+    return acc;
+  }, 0));
+
+  const emits = defineEmits<{
+    (event: 'close'): void;
+    (event: 'select', value: File[]): void;
+    (event: 'confirm'): void;
+  }>();
+
+  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+
+  function updateProgress(ev: ProgressEvent, id: string): void {
+    if (ev.lengthComputable) {
+      progress.value[id] = parseFloat(((ev.loaded / ev.total) * 100).toFixed(1));
+    }
+  }
+
+  function onFilesSelect(value: File[] | FileList) {
+    isUploading.value = true;
+    totalSize.value = [...value].reduce((acc, f) => {
+      acc += f.size;
+      return acc;
+    }, 0);
+
+    [...value].forEach((file: File) => {
+      const id = getRandomId(5);
+      if (!files.value[id]) {
+        files.value[id] = file;
+        const reader = new FileReader();
+
+        const controller = new AbortController();
+
+        reader.addEventListener('loadstart', (event) => updateProgress(event, id));
+        reader.addEventListener('load', (event) => updateProgress(event, id));
+        reader.addEventListener('loadend', () => {
+          progress.value[id] = 100;
+          controller.abort();
+        });
+        reader.addEventListener('progress', (event) => updateProgress(event, id));
+
+        reader.readAsDataURL(file);
+      }
+    });
+  }
+
+  watch(
+    () => uploadedSize.value,
+    () => {
+      if (isUploading.value && uploadedSize.value === totalSize.value) {
+        emits('select', Object.values(files.value));
+        emits('confirm');
+      }
+    },
+  );
+</script>
+
+<template>
+  <div :class="$style.uploadFilesDialog">
+    <div
+      v-if="isUploading"
+      :class="$style.uploading"
+    >
+      <div :class="$style.uploadingHeader">
+        <div :class="$style.folderName">
+          {{ currentFolderName }}
+        </div>
+
+        <div :class="$style.totalProgress">
+          {{ totalSize === 0 ? 0 : parseInt(((uploadedSize / totalSize) * 100).toFixed(1)) }}%
+        </div>
+      </div>
+
+      <div :class="$style.uploadingContent">
+        <div
+          v-for="(value, id) in progress"
+          :key="id"
+          :class="$style.uploadingItem"
+        >
+          <div :class="$style.uploadingItemBody">
+            <div :class="$style.uploadingItemLabel">
+              <ui3n-icon
+                icon="round-subject"
+                color="var(--color-icon-table-secondary-default)"
+              />
+
+              <div :class="$style.uploadingItemName">
+                {{ files[id].name }}
+              </div>
+            </div>
+
+            <ui3n-progress-linear :value="value" />
+          </div>
+
+          <div :class="$style.uploadingItemType">
+            <file-type :file-type="getFileExtension(files[id].name).toLowerCase()" />
+          </div>
+
+          <div :class="$style.uploadingItemSize">
+            {{ formatFileSize(files[id].size) }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <ui3n-drop-files
+      v-else
+      permanent-display
+      @select="onFilesSelect"
+    >
+      <template #additional-text>
+        <div :class="$style.additional">
+          <span :class="$style.text">
+            {{ $tr('app.upload.text.additional1') }}: <b>{{ currentFolder ? `/${currentFolder}` : 'Home' }}</b>
+          </span>
+
+          <div :class="$style.additionalInfo">
+            <span v-ui3n-html="$tr('app.upload.text.additional2')" />&nbsp;
+            <ui3n-input-file
+              multiple
+              :button-text="$tr('app.upload.file.text')"
+              @update:model-value="onFilesSelect"
+            />
+          </div>
+        </div>
+      </template>
+    </ui3n-drop-files>
+  </div>
+</template>
+
+<style lang="scss" module>
+  @use '../../assets/styles/mixins' as mixins;
+
+  .uploadFilesDialog {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    padding: var(--spacing-ml);
+    border-radius: var(--spacing-ml);
+    background-color: var(--color-bg-block-primary-default);
+  }
+
+  .uploading {
+    position: relative;
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    border-radius: var(--spacing-s);
+    border: 1px solid var(--color-border-block-primary-default);
+    padding: var(--spacing-ml);
+  }
+
+  .uploadingHeader {
+    display: flex;
+    width: 100%;
+    justify-content: space-between;
+    align-items: center;
+    column-gap: var(--spacing-m);
+    color: var(--color-text-control-primary-default);
+    margin-bottom: var(--spacing-m);
+  }
+
+  .folderName {
+    position: relative;
+    font-size: var(--font-18);
+    font-weight: 400;
+    @include mixins.text-overflow-ellipsis();
+  }
+
+  .totalProgress {
+    position: relative;
+    width: 48px;
+    font-size: var(--font-16);
+    font-weight: 500;
+  }
+
+  .uploadingContent {
+    position: relative;
+    width: 100%;
+    height: calc(100% - 40px);
+    overflow-y: auto;
+  }
+
+  .uploadingItem {
+    position: relative;
+    width: 100%;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    column-gap: var(--spacing-s);
+    color: var(--color-text-control-primary-default);
+    padding-right: var(--spacing-s);
+    margin-bottom: var(--spacing-m);
+  }
+
+  .uploadingItemBody {
+    position: relative;
+    flex-grow: 1;
+  }
+
+  .uploadingItemLabel {
+    display: flex;
+    width: 100%;
+    justify-content: flex-start;
+    align-items: center;
+    column-gap: var(--spacing-xs);
+    margin-bottom: var(--spacing-xs);
+  }
+
+  .uploadingItemName {
+    font-size: var(--font-12);
+    line-height: var(--font-16);
+    font-weight: 400;
+  }
+
+  .uploadingItemType {
+    position: relative;
+    width: 40px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+  }
+
+  .uploadingItemSize {
+    position: relative;
+    width: 72px;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    font-size: var(--font-12);
+    font-weight: 600;
+  }
+
+  .additional {
+    position: relative;
+  }
+
+  .text {
+    display: inline-block;
+    font-size: var(--font-12);
+    font-weight: 400;
+    color: var(--color-text-table-secondary-default);
+    margin-bottom: var(--spacing-s);
+  }
+
+  .additionalInfo {
+    font-size: var(--font-12);
+    font-weight: 500;
+    line-height: var(--font-16);
+    color: var(--color-text-control-secondary-default);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    column-gap: var(--space-xs);
+
+    span {
+      display: inline-block;
+    }
+  }
+</style>

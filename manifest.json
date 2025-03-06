@@ -1,24 +1,49 @@
 {
-  "name": "Files in PrivacySafe",
+  "name": "Files",
   "appDomain": "files.app.privacysafe.io",
-	"version": "0.5.2",
+  "version": "0.5.3",
   "components": {
     "/index.html": {
       "startedBy": "user",
       "runtime": "web-gui",
       "capsRequested": {
-        "device": {
-          "fileDialog": "all"
+        "apps": "opener",
+        "logout": "all",
+        "log": "all",
+        "mailerid": true,
+        "shell": {
+          "fileDialog": "all",
+          "userNotifications": true,
+          "fsResource": {
+            "otherApps": {
+              "launcher.app.privacysafe.io": "ui-settings"
+            }
+          }
         },
         "storage": {
-          "appFS": "default",
+          "appFS": [
+            {
+              "domain": "files.app.privacysafe.io",
+              "storage": "synced-n-local"
+            }
+          ],
           "userFS": "all",
           "sysFS": "all"
         },
-        "mailerid": true,
-        "log": "all"
-      }
+        "mail": {
+          "sendingTo": "all",
+          "receivingFrom": "all"
+        },
+        "connectivity": "check"
+      },
+      "windowOpts": {
+        "width": 1200,
+        "height": 680,
+        "minWidth": 1024,
+        "minHeight": 600,
+        "maxWidth": 1680
+      },
+      "icon": "logo.png"
     }
   }
-
 }

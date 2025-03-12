@@ -1,7 +1,7 @@
 {
   "name": "Files",
   "appDomain": "files.app.privacysafe.io",
-  "version": "0.5.3",
+  "version": "0.5.9",
   "components": {
     "/index.html": {
       "startedBy": "user",

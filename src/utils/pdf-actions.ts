@@ -1,9 +1,8 @@
 import * as pdfjs from 'pdfjs-dist';
 
-export async function createPdfThumbnail(file: web3n.files.ReadonlyFile, targetSize: number): Promise<string> {
+export async function createPdfThumbnail(byteArray: Uint8Array, targetSize: number): Promise<string> {
   pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
 
-  const byteArray = await file.readBytes();
   const pdf = await pdfjs.getDocument(byteArray).promise;
   const page1 = await pdf.getPage(1);
   let viewport = page1.getViewport({ scale: 1 });

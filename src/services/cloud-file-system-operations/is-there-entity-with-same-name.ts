@@ -14,21 +14,27 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-export async function deleteXAttrs({
+
+export function isThereEntityWithSameName({
   fs,
-  path,
-  attrNames,
+  entityPath,
+  entityType = 'folder',
 }: {
   fs: web3n.files.WritableFS;
-  path: string;
-  attrNames: string[];
+  entityPath: string;
+  entityType: 'folder' | 'file' | 'link';
 }) {
   try {
-    await fs!.updateXAttrs(path, {
-      remove: attrNames,
-    });
+    switch (entityType) {
+      case 'folder':
+        return fs.checkFolderPresence(entityPath);
+      case 'file':
+        return fs.checkFilePresence(entityPath);
+      case 'link':
+        return fs.checkLinkPresence(entityPath);
+    }
   } catch (e) {
-    const errorMessage = `Error delete xAttrs (${attrNames.join(', ')}) in the entity ${path}. `;
-    await w3n.log!('error', errorMessage, e);
+    w3n.log('error', `Error while checking the ${entityType} "${entityPath}" presence. `, e);
+    return Promise.resolve(false);
   }
 }

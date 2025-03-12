@@ -24,6 +24,8 @@
     I18N_KEY,
     VueBusPlugin,
     VUEBUS_KEY,
+    NotificationsPlugin,
+    NOTIFICATIONS_KEY,
   } from '@v1nt1248/3nclient-lib/plugins';
   import { Ui3nProgressCircular } from '@v1nt1248/3nclient-lib';
   import { cloudFileSystemSrv } from '@/services/services-provider';
@@ -41,9 +43,10 @@
   const bus = inject<VueBusPlugin<AppGlobalEvents>>(VUEBUS_KEY)!;
   const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
   const dialogs = inject<DialogsPlugin>(DIALOGS_KEY)!;
+  const notifications = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
 
   const { trashFolderName } = cloudFileSystemSrv;
-  const { deleteEntity } = useFsEntryStore();
+  const { downloadEntities, deleteEntity, restoreEntities } = useFsEntryStore();
 
   const currentProcessedPaths = ref({ first: '', second: '' });
   const isLoading = ref(false);
@@ -64,11 +67,11 @@
     { action }: { action: FsTableBulkActionName },
     entities: ListingEntryExtended[],
   ) {
-    console.log('handleBulkActions: ', action, entities);
     switch (action) {
       case 'delete':
-        // eslint-disable-next-line
+        // eslint-disable-next-line no-case-declarations
         const component = defineAsyncComponent(() => import('@/components/dialogs/confirmation-dialog.vue'));
+
         dialogs.$openDialog<typeof component>({
           component,
           componentProps: {
@@ -81,12 +84,63 @@
             confirmButtonBackground: 'var(--error-content-default)',
             confirmButtonColor: 'var(--error-fill-default)',
             onConfirm: async () => {
-              const res = entities.map((entity) => deleteEntity(entity));
-              await Promise.all(res);
-              bus.$emitter.emit('refresh:data', void 0);
+              try {
+                const res = entities.map((entity) => deleteEntity(entity));
+                await Promise.all(res);
+                bus.$emitter.emit('refresh:data', void 0);
+                notifications.$createNotice({
+                  type: 'info',
+                  withIcon: true,
+                  content: entities.length > 1
+                    ? $tr('fs.entity.delete.plural.message.success', { count: `${entities.length}` })
+                    : $tr('fs.entity.delete.single.message.success'),
+                })
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+              } catch (err) {
+                notifications.$createNotice({
+                  type: 'error',
+                  withIcon: true,
+                  content: entities.length > 1
+                    ? $tr('fs.entity.delete.plural.message.error', { count: `${entities.length}` })
+                    : $tr('fs.entity.delete.single.message.error'),
+                })
+              }
             },
           },
         });
+
+        break;
+      case 'restore': {
+        let res = 0;
+        try {
+          res = await restoreEntities(entities);
+
+          if (res > 0) {
+            bus.$emitter.emit('refresh:data', void 0);
+            notifications.$createNotice({
+              type: 'success',
+              withIcon: true,
+              content: res > 1
+                ? $tr('fs.entity.restore.plural.message.success', { count: `${res}` })
+                : $tr('fs.entity.restore.single.message.success'),
+            })
+          }
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        } catch (err) {
+          notifications.$createNotice({
+            type: 'error',
+            withIcon: true,
+            content: res > 1
+              ? $tr('fs.entity.restore.plural.message.error', { count: `${res}` })
+              : $tr('fs.entity.restore.single.message.error'),
+          })
+        }
+
+        break;
+      }
+      case 'download':
+        await downloadEntities(entities);
+
         break;
     }
   }

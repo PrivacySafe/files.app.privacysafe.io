@@ -8,6 +8,7 @@ import {
   i18n,
   I18nOptions,
   notifications,
+  storeDialogs,
   storeVueBus,
   storeI18n,
   storeNotifications,
@@ -30,6 +31,7 @@ const init = () => {
     pinia.use(piniaRouter);
     pinia.use(storeVueBus);
     pinia.use(storeI18n);
+    pinia.use(storeDialogs);
     pinia.use(storeNotifications);
 
     const app = createApp(App);

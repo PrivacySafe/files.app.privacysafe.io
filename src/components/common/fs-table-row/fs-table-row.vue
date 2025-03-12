@@ -65,51 +65,22 @@
   }
 
   function updateFavorite() {
-    console.log('updateFavorite: ', props.row);
     if (props.row?.type !== 'folder') {
       return;
     }
 
     emits('action', { event: 'update:favorite', payload: { row: props.row } });
   }
-  //
-  // function onDragstart(ev: DragEvent, row: ListingEntryExtended) {
-  //   if (ev.dataTransfer) {
-  //     ev.dataTransfer.setData('text/plain', JSON.stringify(row));
-  //     ev.dataTransfer.effectAllowed = 'copyMove';
-  //   }
-  // }
-  //
-  // function isDroppable(ev: DragEvent, row: ListingEntryExtended): void {
-  //   console.log('isDroppable: ', ev.dataTransfer?.types, row);
-  //   if (row.type === 'folder') {
-  //     console.log('----- YES -----');
-  //     ev.preventDefault();
-  //   }
-  // }
-  //
-  // function onDrop(ev: DragEvent, row: ListingEntryExtended): void {
-  //   console.log('onDrop: ', ev.dataTransfer);
-  //   const sourceAsString = ev.dataTransfer?.getData('text/plain');
-  //   const source = sourceAsString ? JSON.parse(sourceAsString) : '';
-  //   console.log('SOURCE: ', source);
-  //   console.log('TARGET: ', row);
-  //   ev.preventDefault();
-  // }
 </script>
 
 <template>
-  <!--  @dragstart="onDragstart($event, row)"-->
-  <!--  @dragenter="isDroppable($event, row)"-->
-  <!--  @dragover="isDroppable($event, row)"-->
-  <!--  @drop="onDrop($event, row)"-->
   <div
     :class="[
       $style.fsTableRow,
       (disabled || readonly) && $style.fsTableRowDisabled,
       isDroppable && $style.droppable
     ]"
-    :draggable="!editNameMode"
+    :draggable="isRowSelected && !editNameMode"
     @click="handleDblClick"
   >
     <div
@@ -125,11 +96,31 @@
           :model-value="true"
         />
 
-        <ui3n-icon
-          v-else
-          :icon="row.type === 'folder' ? 'round-folder' : 'round-subject'"
-          color="var(--color-icon-table-secondary-default)"
-        />
+        <template v-else>
+          <template v-if="isDroppable">
+            <ui3n-icon
+              icon="round-system-update-alt"
+              :rotate="-90"
+              color="var(--color-icon-control-accent-default)"
+            />
+          </template>
+
+          <template v-else>
+            <ui3n-icon
+              :class="$style.iconCheck"
+              icon="round-check-box-outline-blank"
+              :width="20"
+              :height="20"
+              color="var(--color-icon-control-accent-default)"
+            />
+
+            <ui3n-icon
+              :class="$style.iconType"
+              :icon="row.type === 'folder' ? 'round-folder' : 'round-subject'"
+              color="var(--color-icon-table-secondary-default)"
+            />
+          </template>
+        </template>
       </div>
 
       <ui3n-editable
@@ -199,6 +190,14 @@
         opacity: 1;
         cursor: pointer;
       }
+
+      .iconCheck {
+        display: block !important;
+      }
+
+      .iconType {
+        display: none !important;
+      }
     }
 
     &:hover {
@@ -212,7 +211,7 @@
 
   .droppable {
     position: relative;
-    background-color: lightgreen;
+    background-color: var(--color-bg-control-primary-hover);
   }
 
   .favoriteIcon {
@@ -245,6 +244,17 @@
     min-width: var(--spacing-m);
     width: var(--spacing-m);
     height: var(--spacing-m);
+  }
+
+  .iconCheck {
+    position: relative;
+    left: -2px;
+    top: -2px;
+    display: none !important;
+  }
+
+  .iconType {
+    position: relative;
   }
 
   .type {

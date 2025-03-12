@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-  import { computed, inject, nextTick, onBeforeMount, onBeforeUnmount, ref, watch, useCssModule } from 'vue';
+  import { computed, inject, nextTick, onBeforeMount, onBeforeUnmount, ref, watch } from 'vue';
   import size from 'lodash/size';
   import isEmpty from 'lodash/isEmpty';
   import { I18N_KEY, I18nPlugin, VUEBUS_KEY, VueBusPlugin } from '@v1nt1248/3nclient-lib/plugins';
@@ -10,11 +10,12 @@
     Ui3nTitle,
     type Ui3nTableProps,
     type Ui3nTableSort,
-    type Nullable,
+    type Nullable, Ui3nIcon,
   } from '@v1nt1248/3nclient-lib';
   import { cloudFileSystemSrv } from '@/services/services-provider';
   import { useFsEntryStore } from '@/store';
   import { prepareFolderDataTable } from '@/utils';
+  import { getGhostElementText } from './utils';
   import type { AppGlobalEvents, ListingEntryExtended } from '@/types';
   import { FsTableRowEvents, FsTableRowProps } from '@/components/common/fs-table-row/types';
   import type { FsTableProps, FsTableEmits, FsTableSlots } from './types';
@@ -28,7 +29,6 @@
   const emits = defineEmits<FsTableEmits>();
   defineSlots<FsTableSlots>();
 
-  const $cssVars = useCssModule();
   const bus = inject<VueBusPlugin<AppGlobalEvents>>(VUEBUS_KEY)!;
   const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 
@@ -42,7 +42,7 @@
 
   const draggedRows = ref<string[]>([]);
   const droppableRow = ref<Nullable<string>>(null);
-  const ghostEl = ref<Nullable<HTMLElement>>(null);
+  const ghostEl = ref<Nullable<HTMLDivElement>>(null);
 
   const isNoDataInFolder = computed(() => isEmpty(folderData.value?.body?.content));
 
@@ -52,7 +52,7 @@
   const sortConfig = computed(() => folderData.value?.config?.sortOrder || { field: 'name', direction: 'desc' });
 
   const pathInfo = computed(() => props.path
-    ? `${props.basePath.title} / ${props.path.replaceAll('/', ' / ')}`
+    ? `${props.basePath.title}/${props.path}`
     : `${props.basePath.title}`,
   );
 
@@ -148,68 +148,39 @@
     }
   }
 
-  function prepareDragImage(row: ListingEntryExtended, size: number): HTMLCanvasElement {
-    // const canvas = document.createElement('canvas');
-    // canvas.height = 20;
-    // canvas.width = 200;
-    // const ctx = canvas.getContext('2d');
-    //
-    // if (ctx) {
-    //   console.log('CTX: ', ctx);
-    //   ctx.font = '12px Manrope';
-    //   const text = size === 1 ? `${row.name}` : `${row.name} (+ ${size - 1})`;
-    //
-    //   ctx.fillText(text, 4, 4);
-    // }
-
-    const canvas = document.createElement('canvas');
-    canvas.width = canvas.height = 50;
-
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.lineWidth = 4;
-      ctx.moveTo(0, 0);
-      ctx.lineTo(50, 50);
-      ctx.moveTo(0, 50);
-      ctx.lineTo(50, 0);
-      ctx.stroke();
-    }
-
-    return canvas;
-  }
-
   function onDragstart(ev: DragEvent, row: ListingEntryExtended) {
     if (ev.dataTransfer) {
       const data = size(selectedFsEntities.value) > 1
         ? JSON.stringify(selectedFsEntities.value)
-        : JSON.stringify(row);
+        : JSON.stringify([row]);
       draggedRows.value = size(selectedFsEntities.value) > 1
         ? selectedFsEntities.value.map(r => r.fullPath)
         : [row.fullPath];
 
+      const ghostElText = getGhostElementText(selectedFsEntities.value);
+
+      ghostEl.value = document.getElementById('home-dragging-ghost')!.cloneNode(true) as HTMLDivElement;
+      const ghostElContent = ghostEl.value.querySelector('span');
+      ghostElContent!.innerText = ghostElText;
+      document.body.appendChild(ghostEl.value);
+
       ev.dataTransfer.setData('text/plain', data);
       ev.dataTransfer.effectAllowed = 'copyMove';
+      ev.dataTransfer.setDragImage(ghostEl.value!, -8, 0);
 
-      const dragEl = ev.target as HTMLElement;
-      ghostEl.value = dragEl.cloneNode(true) as HTMLElement;
-      ghostEl.value.classList.add($cssVars.dragging);
-      document.body.appendChild(ghostEl.value);
+      emits('drag:start');
     }
   }
 
-  function onDragend(ev: DragEvent, row: ListingEntryExtended) {
-    console.log('onDragend: ', ev, row);
+  function onDragend() {
     droppableRow.value = null;
     draggedRows.value = [];
-
-    if (ghostEl.value) {
-      ghostEl.value.remove();
-      ghostEl.value = null;
-    }
+    ghostEl.value && document.body.removeChild(ghostEl.value);
+    ghostEl.value = null;
+    emits('drag:stop');
   }
 
-  function isDroppable(evName: string, ev: DragEvent, row: ListingEntryExtended): void {
-    console.log('isDroppable: ', evName, ev.dataTransfer, row.name);
+  function isDroppable(ev: DragEvent, row: ListingEntryExtended): void {
     if (row.type === 'folder') {
       droppableRow.value = row.fullPath;
       ev.preventDefault();
@@ -226,13 +197,12 @@
   }
 
   function onDrop(ev: DragEvent, row: ListingEntryExtended): void {
-    console.log('onDrop: ', ev.dataTransfer);
     const sourceAsString = ev.dataTransfer?.getData('text/plain');
-    const source = sourceAsString ? JSON.parse(sourceAsString) : '';
+    const data = sourceAsString ? JSON.parse(sourceAsString) : null;
+    const target = !draggedRows.value.includes(row.fullPath) ? row : null;
+    emits('drag:end', { data, target });
     droppableRow.value = null;
     draggedRows.value = [];
-    console.log('SOURCE: ', source);
-    console.log('TARGET: ', row);
     ev.preventDefault();
   }
 
@@ -249,6 +219,16 @@
     bus.$emitter.off('upload:file', loadFolderData);
     bus.$emitter.off('refresh:data', loadFolderData);
   });
+
+  watch(
+    () => tableComponent.value,
+    () => {
+      if (tableComponent.value) {
+        emits('init', tableComponent.value);
+      }
+    },
+    { immediate: true },
+  );
 
   watch(
     () => props.path,
@@ -309,9 +289,9 @@
           :disabled="isTrashFolder"
           @action="handleActions"
           @dragstart="onDragstart($event, row)"
-          @dragend="onDragend($event, row)"
-          @dragenter="isDroppable('- dragenter -', $event, row)"
-          @dragover="isDroppable('- dragover -', $event, row)"
+          @dragend="onDragend()"
+          @dragenter="isDroppable($event, row)"
+          @dragover="isDroppable($event, row)"
           @dragleave="onDragleave($event, row)"
           @drop="onDrop($event, row)"
         />
@@ -319,7 +299,7 @@
 
       <template #unused-place>
         <div
-          v-if="!isTrashFolder && isNoDataInFolder"
+          v-if="!isTrashFolder && isNoDataInFolder && !isInDraggingMode"
           :class="$style.noData"
         >
           <ui3n-drop-files
@@ -338,6 +318,27 @@
               </div>
             </template>
           </ui3n-drop-files>
+        </div>
+
+        <div
+          v-if="!isTrashFolder && isInSplitMode && !isActive"
+          :class="[
+            $style.droppablePlace,
+            !!droppableRow && droppableRow === (path || '/') && $style.droppablePlaceShow
+          ]"
+          @dragend="onDragend()"
+          @dragenter="isDroppable($event, { type: 'folder', fullPath: path || '/' } as ListingEntryExtended)"
+          @dragover="isDroppable($event, { type: 'folder', fullPath: path || '/' } as ListingEntryExtended)"
+          @dragleave="onDragleave($event, { type: 'folder', fullPath: path || '/' } as ListingEntryExtended)"
+          @drop="onDrop($event, { type: 'folder', fullPath: path || '/' } as ListingEntryExtended)"
+        >
+          <ui3n-icon
+            icon="round-system-update-alt"
+            :width="48"
+            :height="48"
+            :rotate="-90"
+            color="var(--color-icon-control-accent-default)"
+          />
         </div>
       </template>
 
@@ -361,7 +362,7 @@
       }"
       :class="$style.path"
     >
-      {{ pathInfo }}
+      {{ pathInfo.replaceAll('/', ' / ') }}
     </div>
   </div>
 </template>
@@ -390,6 +391,8 @@
   }
 
   .fsTableInSplitMode {
+    padding-bottom: 24px;
+
     & > div:first-child {
       & > div:last-child {
         height: calc(100% - 60px);
@@ -462,12 +465,24 @@
     padding: 0 var(--spacing-s);
     font-size: var(--font-11);
     color: var(--color-text-control-primary-default);
+    border-top: 1px solid var(--color-border-table-primary-default);
     @include mixins.text-overflow-ellipsis();
   }
 
-  .dragging {
-    position: fixed;
-    left: -9999px;
-    border: 1px dashed;
+  .droppablePlace {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    justify-content: center;
+    align-items: center;
+    opacity: 0;
+    transition: all 0.2s ease-in-out;
+    background-color: transparent;
+  }
+
+  .droppablePlaceShow {
+    opacity: 1;
+    transition: all 0.2s ease-in-out;
+    background-color: var(--color-bg-control-primary-hover);
   }
 </style>

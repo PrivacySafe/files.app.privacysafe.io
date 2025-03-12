@@ -17,13 +17,18 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { SingleProc } from '@/services/processes';
+import { isThereEntityWithSameName } from './is-there-entity-with-same-name';
 import { createFolderInFS } from './make-folder';
 import { loadFsEntityStats } from './load-fs-entity-stats';
 import { moveFsEntity } from './move-fs-entity';
+import { copyFsEntities } from './copy-fs-entities';
+import { moveFsEntities } from './move-fs-entities';
 import { renameFsEntity } from './rename-fs-entity';
 import { deleteEntityInFs } from './delete-entity';
+import { downloadEntities as downloadSelectedEntities } from './download-entities';
 import { updateXAttrs } from './update-x-attrs';
 import { deleteXAttrs } from './delete-x-attrs';
+import { restoreFsEntity } from './restore-fs-entity';
 import { loadFolderContentList } from './load-folder-content-list';
 import { loadPreparedFolderContentList } from './load-prepared-folder-content-list';
 import { createFileBaseOnOsFileSystemFile } from './create-file-based-on-os-file-system-file';
@@ -57,10 +62,34 @@ export async function cloudFileSystemOperations(): Promise<CloudFileSystemOperat
     return loadFsEntityStats(fs!, fullPath);
   };
 
+  const isEntityPresent = async (
+    entityPath: string,
+    entityType: 'folder' | 'file' | 'link' = 'folder',
+  ): Promise<boolean> => {
+    await checkFs();
+    return await fileProc.startOrChain(async () => {
+      return isThereEntityWithSameName({ fs: fs!, entityPath, entityType });
+    });
+  };
+
   const moveEntity = async (oldPath: string, newPath: string): Promise<void> => {
     await checkFs();
     await fileProc.startOrChain(async () => {
       await moveFsEntity({ fs: fs!, oldFullPath: oldPath, newFullPath: newPath });
+    });
+  };
+
+  const copyEntities = async (entities: ListingEntryExtended[], targetFolder: string): Promise<void> => {
+    await checkFs();
+    await fileProc.startOrChain(async () => {
+      await copyFsEntities({ fs: fs!, entities, targetFolder });
+    });
+  };
+
+  const moveEntities = async (entities: ListingEntryExtended[], targetFolder: string): Promise<void> => {
+    await checkFs();
+    await fileProc.startOrChain(async () => {
+      await moveFsEntities({ fs: fs!, entities, targetFolder });
     });
   };
 
@@ -69,12 +98,25 @@ export async function cloudFileSystemOperations(): Promise<CloudFileSystemOperat
     await renameFsEntity({ fs: fs!, oldPath, newName });
   };
 
-  const deleteEntity = async (path: string, entityType: 'folder' | 'file' | 'link'): Promise<void> => {
+  const deleteEntity = async (entity: ListingEntryExtended): Promise<void> => {
     await checkFs();
-    console.log('SRV DELETE_ENTITY: ', path, entityType, trashFolderName);
     await fileProc.startOrChain(async () => {
-      await deleteEntityInFs({ fs: fs!, path, entityType, trashFolderName });
+      await deleteEntityInFs({ fs: fs!, entity, trashFolderName });
     });
+  };
+
+  const restoreEntity = async (
+    entity: ListingEntryExtended,
+    mode: 'restore' | 'keep' | 'replace' = 'restore',
+  ): Promise<void> => {
+    await checkFs();
+    await fileProc.startOrChain(async () => {
+      await restoreFsEntity({ fs: fs!, entity, mode });
+    });
+  };
+
+  const downloadEntities = async (entities: ListingEntryExtended[]): Promise<void> => {
+    return downloadSelectedEntities({ fs: fs!, entities });
   };
 
   const updateEntityXAttrs = async (path: string, attrs: Record<string, any | undefined>): Promise<void> => {
@@ -138,11 +180,16 @@ export async function cloudFileSystemOperations(): Promise<CloudFileSystemOperat
   return {
     fs: fs!,
     trashFolderName,
+    isEntityPresent,
     makeFolder,
     getEntityStats,
     renameEntity,
     moveEntity,
+    copyEntities,
+    moveEntities,
     deleteEntity,
+    restoreEntity,
+    downloadEntities,
     updateEntityXAttrs,
     deleteEntityXAttrs,
     getFolderContentList,

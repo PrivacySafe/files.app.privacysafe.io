@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@v1nt1248/3nclient-lib':
-        specifier: 0.1.70
-        version: 0.1.70(pinia@2.3.1(typescript@5.7.3)(vue@3.5.13(typescript@5.7.3)))(vue@3.5.13(typescript@5.7.3))
+        specifier: 0.1.73
+        version: 0.1.73(pinia@2.3.1(typescript@5.7.3)(vue@3.5.13(typescript@5.7.3)))(vue@3.5.13(typescript@5.7.3))
       dayjs:
         specifier: 1.11.13
         version: 1.11.13
@@ -1082,8 +1082,8 @@ packages:
     resolution: {integrity: sha512-vG0XZo8AdTH9OE6VFRwAZldNc7qtJ/6NLGWak+BtENuEUXGZgFpihILPiBvKXvJ2nFu27XNGC6rKiwuaoMbYzQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@v1nt1248/3nclient-lib@0.1.70':
-    resolution: {integrity: sha512-/z03dXkokg35ZXZgWLcsW0DupMeo7gCgWxMaL1Q24U664qGb4R/x1fuP0R98d5hNw4N2nhqrq4sSQUkOwQB/jA==}
+  '@v1nt1248/3nclient-lib@0.1.73':
+    resolution: {integrity: sha512-s6z6aLajwQXADemF0Pnf7bGM6z3VICOpLL6p2+3ckQ7YwwGM6bUukKCbxTcO3JD/P7nxx+Y8+zOOzLx+gKjBeQ==}
     peerDependencies:
       pinia: 2.3.1
       vue: 3.5.13
@@ -4504,7 +4504,7 @@ snapshots:
       '@typescript-eslint/types': 8.14.0
       eslint-visitor-keys: 3.4.3
 
-  '@v1nt1248/3nclient-lib@0.1.70(pinia@2.3.1(typescript@5.7.3)(vue@3.5.13(typescript@5.7.3)))(vue@3.5.13(typescript@5.7.3))':
+  '@v1nt1248/3nclient-lib@0.1.73(pinia@2.3.1(typescript@5.7.3)(vue@3.5.13(typescript@5.7.3)))(vue@3.5.13(typescript@5.7.3))':
     dependencies:
       '@floating-ui/dom': 1.6.13
       '@floating-ui/vue': 1.1.6(vue@3.5.13(typescript@5.7.3))

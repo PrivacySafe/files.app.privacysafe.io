@@ -1,6 +1,6 @@
 {
   "name": "sorage.app.privacysafe.io",
-  "version": "0.5.1",
+  "version": "0.5.9",
   "description": "Apps Storage",
   "author": "3NSoft, Inc.",
   "license": "GPL-3.0",
@@ -20,7 +20,7 @@
     "test:watch": "pnpm run clean:coverage && jest --watch"
   },
   "dependencies": {
-    "@v1nt1248/3nclient-lib": "0.1.70",
+    "@v1nt1248/3nclient-lib": "0.1.73",
     "dayjs": "1.11.13",
     "lodash": "4.17.21",
     "pdfjs-dist": "^4.10.38",

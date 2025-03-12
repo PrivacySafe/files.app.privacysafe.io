@@ -27,21 +27,23 @@
     VUEBUS_KEY,
   } from '@v1nt1248/3nclient-lib/plugins';
   import { Ui3nButton, Ui3nIcon, Ui3nMenu } from '@v1nt1248/3nclient-lib';
-  import { cloudFileSystemSrv } from '@/services/services-provider';
-  import { useAppStore, useFavoriteStore } from '@/store';
+  import { useAppStore, useFavoriteStore, useFsEntryStore } from '@/store';
   import { SYSTEM_FOLDERS } from '@/constants';
   import type { AppGlobalEvents, FavoriteFolder, SystemFolderView } from '@/types';
   import FavoriteListItem from '@/components/views/dashboard/favorite-list-item/favorite-list-item.vue';
 
-  const dialog = inject<DialogsPlugin>(DIALOGS_KEY)!;
+  const dialogs = inject<DialogsPlugin>(DIALOGS_KEY)!;
   const bus = inject<VueBusPlugin<AppGlobalEvents>>(VUEBUS_KEY)!;
   const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 
   const { setCommonLoading } = useAppStore();
+
   const favoriteStore = useFavoriteStore();
   const { processedFavoriteFolders } = storeToRefs(favoriteStore);
   const { getFavoriteFolderList } = favoriteStore;
-  const { makeFolder, saveFileBaseOnOsFileSystemFile } = cloudFileSystemSrv;
+
+  const fsEntryStore = useFsEntryStore();
+  const { isEntityPresent, makeFolder, saveFileBaseOnOsFileSystemFile, removeFavoriteFolderFromList } = fsEntryStore;
 
   const router = useRouter();
   const route = useRoute();
@@ -68,7 +70,7 @@
 
   function createFolder() {
     const component = defineAsyncComponent(() => import('../components/dialogs/update-folder-name-dialog.vue'));
-    dialog.$openDialog<typeof component>({
+    dialogs.$openDialog<typeof component>({
       component,
       componentProps: {
         name: '',
@@ -90,7 +92,7 @@
 
   function uploadFile() {
     const component = defineAsyncComponent(() => import('../components/dialogs/upload-files-dialog.vue'));
-    dialog.$openDialog<typeof component>({
+    dialogs.$openDialog<typeof component>({
       component,
       componentProps: {
         currentFolder: processedPath.value,
@@ -124,7 +126,28 @@
   async function go(favoriteFolder: FavoriteFolder) {
     const rootFolder = SYSTEM_FOLDERS.find((folder) => folder.name === 'Home');
     bus.$emitter.emit('go:favorite', void 0);
-    await router.push({ path: rootFolder!.route, query: { path: favoriteFolder.fullPath } });
+    const isFolderPresent = await isEntityPresent(favoriteFolder.fullPath);
+    if (isFolderPresent) {
+      await router.push({ path: rootFolder!.route, query: { path: favoriteFolder.fullPath } });
+      return;
+    }
+
+    const component = defineAsyncComponent(() => import('@/components/dialogs/confirmation-dialog.vue'));
+    dialogs.$openDialog<typeof component>({
+      component,
+      componentProps: {
+        dialogText: $tr('favorite.folder.missing.warning.text', { path: favoriteFolder.fullPath }),
+        additionalDialogText: $tr('favorite.folder.missing.warning.question'),
+      },
+      dialogProps: {
+        title: $tr('dialog.title.warning'),
+        confirmButtonBackground: 'var(--error-content-default)',
+        confirmButtonColor: 'var(--error-fill-default)',
+        onConfirm: async () => {
+          await removeFavoriteFolderFromList(favoriteFolder.id);
+        },
+      },
+    });
   }
 
   onBeforeMount(async () => {

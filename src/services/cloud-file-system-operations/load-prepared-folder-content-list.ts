@@ -46,6 +46,7 @@ export async function loadPreparedFolderContentList({
         const id = (await fs!.getXAttr(compoundPath, 'id')) as string | undefined;
         const tags = (await fs!.getXAttr(compoundPath, 'tags')) as string[] | undefined;
         const favoriteId = (await fs!.getXAttr(compoundPath, 'favoriteId')) as string | undefined;
+        const parentFolder = (await fs!.getXAttr(compoundPath, 'parentFolder')) as string | undefined;
 
         preparedList.push({
           id,
@@ -54,6 +55,7 @@ export async function loadPreparedFolderContentList({
           tags: tags || [],
           type: item.isFile ? 'file' : item.isFolder ? 'folder' : 'link',
           ...(favoriteId && { favoriteId }),
+          ...(parentFolder && { parentFolder }),
           ...(item.isFile && { ext: getFileExtension(item.name) }),
           ...stats,
         });

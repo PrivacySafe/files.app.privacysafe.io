@@ -42,11 +42,21 @@ export interface CloudFileSystemOperations {
 
   getEntityStats: (fullPath: string) => Promise<Nullable<ListingEntryExtended & { thumbnail?: string }>>;
 
+  isEntityPresent: (entityPath: string, entityType: 'folder' | 'file' | 'link') => Promise<boolean>;
+
   renameEntity(oldPath: string, newName: string): Promise<void>;
 
   moveEntity(oldPath: string, newPath: string): Promise<void>;
 
-  deleteEntity(path: string, entityType: 'folder' | 'file' | 'link'): Promise<void>;
+  copyEntities(entities: ListingEntryExtended[], targetFolder: string): Promise<void>;
+
+  moveEntities(entities: ListingEntryExtended[], targetFolder: string): Promise<void>;
+
+  deleteEntity(entity: ListingEntryExtended): Promise<void>;
+
+  restoreEntity(entity: ListingEntryExtended, mode: 'restore' | 'keep' | 'replace'): Promise<void>;
+
+  downloadEntities(entities: ListingEntryExtended[]): Promise<void>;
 
   updateEntityXAttrs(path: string, attrs: Record<string, any | undefined>): Promise<void>;
 

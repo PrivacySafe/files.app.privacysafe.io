@@ -66,12 +66,13 @@ export interface SystemFolderView {
 }
 
 export interface ListingEntryExtended extends web3n.files.Stats {
-  id: string | undefined;
   name: string;
   fullPath: string;
-  tags?: string[];
   type: 'folder' | 'file' | 'link';
+  id?: string;
   favoriteId?: string;
+  tags?: string[];
+  parentFolder?: string;
   ext?: string;
   displayingCTime?: string;
 }

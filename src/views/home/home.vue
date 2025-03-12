@@ -17,8 +17,17 @@
 <script lang="ts" setup>
   import { computed, inject, onBeforeMount, onBeforeUnmount, ref } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
-  import { VueBusPlugin, VUEBUS_KEY } from '@v1nt1248/3nclient-lib/plugins';
-  import { Ui3nButton, Ui3nProgressCircular } from '@v1nt1248/3nclient-lib';
+  import size from 'lodash/size';
+  import isEmpty from 'lodash/isEmpty';
+  import {
+    VueBusPlugin,
+    VUEBUS_KEY,
+    I18N_KEY,
+    I18nPlugin,
+    NotificationsPlugin,
+    NOTIFICATIONS_KEY,
+  } from '@v1nt1248/3nclient-lib/plugins';
+  import { type Nullable, Ui3nButton, Ui3nIcon, Ui3nProgressCircular, Ui3nTable } from '@v1nt1248/3nclient-lib';
   import { useFsEntryStore } from '@/store/fs-entity.store';
   import type { AppGlobalEvents, ListingEntryExtended } from '@/types';
   import FsPageToolbar from '@/components/common/fs-page-toolbar/fs-page-toolbar.vue';
@@ -29,17 +38,31 @@
   import type { FsTableBulkActionName } from '@/components/common/fs-table-bulk-actions/types';
 
   const bus = inject<VueBusPlugin<AppGlobalEvents>>(VUEBUS_KEY)!;
+  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+  const notifications = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
 
   const route = useRoute();
   const router = useRouter();
 
-  const { deleteEntity } = useFsEntryStore();
+  const { downloadEntities, deleteEntity, copyMoveEntities } = useFsEntryStore();
+
+  const tableComponents = ref<{
+    left: Nullable<typeof Ui3nTable>;
+    right: Nullable<typeof Ui3nTable>;
+  }>({
+    left: null,
+    right: null,
+  });
 
   const currentProcessedPaths = ref({ first: '', second: '' });
   const isSplitMode = ref(false);
   const isLoading = ref(false);
+  const isMoveMode = ref({
+    left: false,
+    right: false,
+  });
+  const isDragging = ref(false);
   const displayedFsEntity = ref<string>('');
-  const selectedEntities = ref<ListingEntryExtended[]>([]);
 
   const activeWindow = computed(() => {
     const { activePath = '1' } = route.query as { path?: string; path2?: string; activePath?: string };
@@ -70,22 +93,24 @@
       isSplitMode.value = true;
     }
   }
+  async function switchNoSplitMode() {
+    displayedFsEntity.value = '';
+    isSplitMode.value = false;
+    isMoveMode.value.right = false;
+    await router.push({ query: { path: currentProcessedPaths.value.first, path2: '', activePath: '1' } });
+  }
 
   async function selectActiveWindow(val: '1' | '2') {
-    const { path = '', path2 = '' } = route.query as { path?: string; path2?: string; activePath?: string };
-    await router.push({ query: { path, path2, activePath: val } });
+    const { path = '', path2 = '', activePath } = route.query as { path?: string; path2?: string; activePath?: string };
+    if (activePath !== val) {
+      await router.push({ query: { path, path2, activePath: val } });
+    }
   }
 
   function fsEntityInfoOpen(path: string) {
     if (!isSplitMode.value) {
       displayedFsEntity.value = path;
     }
-  }
-
-  async function switchNoSplitMode() {
-    displayedFsEntity.value = '';
-    isSplitMode.value = false;
-    await router.push({ query: { path: currentProcessedPaths.value.first, path2: '', activePath: '1' } });
   }
 
   async function deleteSelectedEntities(entities: ListingEntryExtended[] = []) {
@@ -100,13 +125,84 @@
   }
 
   async function handleBulkActions(
-    { action }: { action: FsTableBulkActionName },
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    { action, payload }: { action: FsTableBulkActionName, payload?: unknown },
     entities: ListingEntryExtended[],
   ) {
     switch (action) {
       case 'delete':
         await deleteSelectedEntities(entities);
         break;
+
+      case 'download':
+        await downloadEntities(entities);
+        break;
+    }
+  }
+
+  function toggleCopyMoveMode(value: boolean, window: '1' | '2' = '1') {
+    const tablePosition = window === '1' ? 'left' : 'right';
+    isMoveMode.value[tablePosition] = value;
+  }
+
+  function onDragStart(window: '1' | '2') {
+    selectActiveWindow(window);
+    isDragging.value = true
+  }
+
+  async function onDragEnd({ data, target }: {
+    data: Nullable<ListingEntryExtended[]>;
+    target: Nullable<ListingEntryExtended>
+  }) {
+    isDragging.value = false;
+
+    if (isEmpty(data) || !target) {
+      return;
+    }
+
+    try {
+      isLoading.value = true;
+      await copyMoveEntities(data!, target, isMoveMode.value[activeWindow.value]);
+
+      // @ts-ignore
+      tableComponents.value.left && tableComponents.value.left!.closeGroupActionsRow();
+      // @ts-ignore
+      tableComponents.value.right && tableComponents.value.right!.closeGroupActionsRow();
+      isMoveMode.value = {
+        left: false,
+        right: false,
+      };
+
+      bus.$emitter.emit('refresh:data', void 0);
+      const successMessageSingle = isMoveMode.value[activeWindow.value]
+        ? $tr('fs.entity.move.single.message.success')
+        : $tr('fs.entity.copy.single.message.success');
+      const successMessageMulti = isMoveMode.value[activeWindow.value]
+        ? $tr('fs.entity.move.plural.message.success', { count: `${size(data)}` })
+        : $tr('fs.entity.copy.plural.message.success', { count: `${size(data)}` });
+
+      notifications.$createNotice({
+        type: 'success',
+        withIcon: true,
+        content: size(data) > 1 ? successMessageMulti : successMessageSingle,
+      });
+    } catch (e) {
+      console.error(e);
+
+      const errorMessageSingle = isMoveMode.value[activeWindow.value]
+        ? $tr('fs.entity.move.single.message.error')
+        : $tr('fs.entity.copy.single.message.error');
+      const errorMessageMulti = isMoveMode.value[activeWindow.value]
+        ? $tr('fs.entity.move.plural.message.error', { count: `${size(data)}` })
+        : $tr('fs.entity.copy.plural.message.error', { count: `${size(data)}` });
+
+      notifications.$createNotice({
+        type: 'error',
+        withIcon: true,
+        content: size(data) > 1 ? errorMessageMulti : errorMessageSingle,
+      });
+    } finally {
+      isLoading.value = false;
     }
   }
 
@@ -120,7 +216,7 @@
 </script>
 
 <template>
-  <div :class="$style.home">
+  <div :class="[$style.home, isDragging && $style.homeDraggingMode]">
     <fs-page-toolbar
       :base-path="{ fullPath: '', title: 'Home' }"
       :is-split-mode="isSplitMode"
@@ -146,20 +242,26 @@
             name="home"
             :path="currentProcessedPaths.first"
             :is-in-split-mode="isSplitMode"
+            :is-in-dragging-mode="isDragging"
             :is-active="isSplitMode && activeWindow === 'left'"
             :is-loading="isLoading"
+            @init="tableComponents.left = $event"
             @loading="isLoading = $event"
             @make:active="selectActiveWindow('1')"
             @go="go"
             @open:info="fsEntityInfoOpen"
-            @select:entity="selectedEntities = $event"
+            @drag:start="onDragStart('1')"
+            @drag:end="onDragEnd"
+            @drag:stop="isDragging = false"
           >
             <template #group-actions="{ selectedRows }">
               <fs-table-bulk-actions
                 :config="HOME_PAGE_FS_ACTIONS"
                 :selected-rows="selectedRows"
+                :is-move-mode="isMoveMode.left"
                 :disabled="isLoading"
                 @action="handleBulkActions($event, selectedRows)"
+                @update:move-mode="toggleCopyMoveMode($event, '1')"
               />
             </template>
           </fs-table>
@@ -173,19 +275,26 @@
             name="home-extra"
             :path="currentProcessedPaths.second"
             :is-in-split-mode="isSplitMode"
+            :is-in-dragging-mode="isDragging"
             :is-active="isSplitMode && activeWindow === 'right'"
             :is-loading="isLoading"
+            @init="tableComponents.right = $event"
             @loading="isLoading = $event"
-            @make:active=" selectActiveWindow('2')"
+            @make:active="selectActiveWindow('2')"
             @go="go"
             @open:info="fsEntityInfoOpen"
+            @drag:start="onDragStart('2')"
+            @drag:end="onDragEnd"
+            @drag:stop="isDragging = false"
           >
             <template #group-actions="{ selectedRows }">
               <fs-table-bulk-actions
                 :config="HOME_PAGE_FS_ACTIONS"
                 :selected-rows="selectedRows"
+                :is-move-mode="isMoveMode.right"
                 :disabled="isLoading"
                 @action="handleBulkActions($event, selectedRows)"
+                @update:move-mode="toggleCopyMoveMode($event, '2')"
               />
             </template>
           </fs-table>
@@ -217,6 +326,30 @@
         size="80"
       />
     </div>
+
+    <div
+      v-if="isDragging"
+      :class="$style.draggingNotice"
+    >
+      <ui3n-icon
+        icon="drag-pan"
+        color="var(--color-icon-table-accent-default)"
+      />
+
+      {{ isMoveMode[activeWindow] ? $tr('fs.entity.action.moving') : $tr('fs.entity.action.copying') }}
+    </div>
+
+    <div
+      id="home-dragging-ghost"
+      :class="$style.draggingInfo"
+    >
+      <ui3n-icon
+        icon="drag-pan"
+        color="var(--color-icon-button-primary-default)"
+      />
+
+      <span>data</span>
+    </div>
   </div>
 </template>
 
@@ -228,6 +361,11 @@
     position: relative;
     width: 100%;
     height: 100%;
+    cursor: default;
+  }
+
+  .homeDraggingMode {
+    cursor: none;
   }
 
   .body {
@@ -247,7 +385,7 @@
     flex-grow: 1;
 
     .reducedTable:first-child {
-      border-right: 1px solid var(--color-border-table-accent-default);
+      border-right: 1px solid var(--color-border-table-primary-default);
     }
   }
 
@@ -286,5 +424,40 @@
     align-items: center;
     pointer-events: none;
     background-color: var(--black-12);
+  }
+
+  .draggingNotice {
+    position: fixed;
+    z-index: 50;
+    width: 96px;
+    height: 48px;
+    left: calc(50% + 95px - 48px);
+    bottom: 56px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    column-gap: var(--spacing-xs);
+    border-radius: 12px;
+    color: var(--color-text-table-primary-default);
+    background-color: var(--color-bg-control-secondary-default);
+    font-size: var(--font-12);
+    line-height: var(--font-16);
+    font-weight: 500;
+  }
+
+  .draggingInfo {
+    position: absolute;
+    top: -200px;
+    left: -1000px;
+    width: max-content;
+    padding: var(--spacing-xs) var(--spacing-s);
+    background-color: var(--color-bg-control-accent-default);
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    column-gap: var(--spacing-s);
+    font-size: var(--font-12);
+    color: var(--color-text-avatar-primary-default);
+    border-radius: 6px;
   }
 </style>

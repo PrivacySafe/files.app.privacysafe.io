@@ -15,66 +15,78 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import isEmpty from 'lodash/isEmpty';
+import { getEntityTargetPath } from './get-entity-target-path';
 import { useFavoriteStore } from '@/store/favoririte.store';
 import { useFsEntryStore } from '@/store/fs-entity.store';
+import type { ListingEntryExtended } from '@/types';
 
 export async function deleteEntityInFs({
   fs,
-  path,
-  entityType,
+  entity,
   trashFolderName,
 }: {
   fs: web3n.files.WritableFS;
-  path: string;
-  entityType: 'folder' | 'file' | 'link';
-  trashFolderName: string;
+  entity: ListingEntryExtended;
+  trashFolderName?: string;
 }): Promise<void> {
   const favoriteStore = useFavoriteStore();
   const { unsetFolderAsFavorite } = useFsEntryStore();
 
+  const { fullPath, type } = entity;
+
   try {
-    const removeCompletely = path.includes(trashFolderName);
+    const removeCompletely = trashFolderName ? fullPath.includes(trashFolderName) : true;
     if (removeCompletely) {
-      switch (entityType) {
+      switch (type) {
         case 'folder':
-          await fs.deleteFolder(path, true);
+          await fs.deleteFolder(fullPath, true);
           break;
         case 'file':
-          await fs.deleteFile(path);
+          await fs.deleteFile(fullPath);
           break;
         case 'link':
-          await fs.deleteLink(path);
+          await fs.deleteLink(fullPath);
           break;
       }
 
       return;
     }
 
-    const parsedPath = path.split('/');
+    const parsedPath = fullPath.split('/');
     const parentFolder = parsedPath.slice(0, -1).join('/');
+    const parentFolderValue = parentFolder || '/';
     const entityName = parsedPath.pop();
 
     if (entityName) {
-      await fs.move(path, `${trashFolderName}/${entityName}`);
-      await fs!.updateXAttrs(`${trashFolderName}/${entityName}`, {
-        set: { parentFolder },
+      const pathInTrash = await getEntityTargetPath({
+        fs,
+        entity,
+        targetFolder: trashFolderName!,
+        namePostfix: `${Date.now()}`,
       });
 
-      if (entityType === 'folder') {
-        const favoriteItems = favoriteStore.favoriteFolders.filter(fav => fav.fullPath.includes(path));
+      await fs.move(fullPath, pathInTrash);
+      await fs!.updateXAttrs(pathInTrash, {
+        set: { parentFolder: parentFolderValue },
+      });
+
+      if (type === 'folder') {
+        const favoriteItems = favoriteStore.favoriteFolders.filter(fav => fav.fullPath.includes(fullPath));
+
         if (isEmpty(favoriteItems)) {
           return;
         }
 
         const unsetFoldersAsFavorite = favoriteItems.map(fav => {
-          const newFavoriteFolderPath = fav.fullPath.replace(path, entityName);
+          const newFavoriteFolderPath = fav.fullPath.replace(fullPath, entityName);
           return unsetFolderAsFavorite(fav.id, `${trashFolderName}/${newFavoriteFolderPath}`);
         });
-        await Promise.all(unsetFoldersAsFavorite);
+
+        await Promise.allSettled(unsetFoldersAsFavorite);
       }
     }
   } catch (e) {
-    const errorMessage = `Error delete the ${entityType} ${path}. `;
+    const errorMessage = `Error delete the ${type} ${fullPath}. `;
     await w3n.log!('error', errorMessage, e);
   }
 }

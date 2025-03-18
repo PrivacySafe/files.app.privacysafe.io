@@ -1,7 +1,10 @@
 {
   "name": "Files",
   "appDomain": "files.app.privacysafe.io",
-  "version": "0.5.9",
+  "icon": "logo.png",
+  "description": "Secure file storage.",
+  "version": "0.5.10",
+
   "components": {
     "/index.html": {
       "startedBy": "user",
@@ -42,8 +45,7 @@
         "minWidth": 1024,
         "minHeight": 600,
         "maxWidth": 1680
-      },
-      "icon": "logo.png"
+      }
     }
   }
 }

@@ -85,7 +85,7 @@
 
 <template>
   <div :class="$style.fsPageToolbar">
-    <ui3n-breadcrumbs>
+    <ui3n-breadcrumbs :class="$style.path">
       <ui3n-breadcrumb
         v-for="(item, index) in arrayOfProcessedPath"
         :key="item.fullPath"
@@ -117,6 +117,10 @@
     height: var(--header-height);
     padding: 0 var(--spacing-m);
     border-bottom: 1px solid var(--color-border-block-primary-default);
+  }
+
+  .path {
+    color: var(--color-text-control-primary-default);
   }
 
   .fsPageToolbarActions {

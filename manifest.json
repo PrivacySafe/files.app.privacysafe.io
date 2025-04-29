@@ -1,9 +1,9 @@
 {
-  "name": "Files",
+  "name": "Storage",
   "appDomain": "files.app.privacysafe.io",
   "icon": "logo.png",
-  "description": "Secure file storage.",
-  "version": "0.5.10",
+  "description": "Feature-rich file manager for secure storage of your digital assets.",
+  "version": "0.5.14",
 
   "components": {
     "/index.html": {

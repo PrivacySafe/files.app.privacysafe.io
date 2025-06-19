@@ -1,13 +1,13 @@
 <script lang="ts" setup>
   import { computed, inject } from 'vue';
-  import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
+  import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
 
   const props = defineProps<{
     dialogText?: string;
     additionalDialogText?: string;
   }>();
 
-  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+  const { $tr } = inject(I18N_KEY)!;
 
   const text = computed(() => props.dialogText || $tr('confirmation.dialog.text'));
 </script>

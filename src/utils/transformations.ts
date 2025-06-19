@@ -28,3 +28,11 @@ export async function getFileArray(file: File): Promise<Uint8Array | undefined |
     reader.readAsArrayBuffer(file);
   });
 }
+
+export function transformStringToURI(val: string): string {
+  return encodeURI(val);
+}
+
+export function transformURIToString(val: string): string {
+  return decodeURI(val);
+}

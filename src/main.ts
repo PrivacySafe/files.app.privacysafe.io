@@ -15,9 +15,8 @@ import {
   vueBus,
 } from '@v1nt1248/3nclient-lib/plugins';
 import { piniaRouter } from '@/plugins/pinia-router';
-import { initializationServices } from '@/services/services-provider';
 
-import App from '@/views/app.vue';
+import App from '@/pages/app.vue';
 
 import '@v1nt1248/3nclient-lib/variables.css';
 import '@v1nt1248/3nclient-lib/style.css';
@@ -25,34 +24,32 @@ import '@/assets/styles/main.css';
 
 import en from './data/i18/en.json';
 
-const init = () => {
-  initializationServices().then(() => {
-    const pinia = createPinia();
-    pinia.use(piniaRouter);
-    pinia.use(storeVueBus);
-    pinia.use(storeI18n);
-    pinia.use(storeDialogs);
-    pinia.use(storeNotifications);
+import { initializationServices } from '@/services/services-provider';
 
-    const app = createApp(App);
+initializationServices().then(() => {
+  const pinia = createPinia();
+  pinia.use(piniaRouter);
+  pinia.use(storeVueBus);
+  pinia.use(storeI18n);
+  pinia.use(storeDialogs);
+  pinia.use(storeNotifications);
 
-    app.config.globalProperties.$router = router;
-    // app.config.globalProperties.$store = store
-    app.config.compilerOptions.isCustomElement = tag => {
-      return tag.startsWith('ui3n-');
-    };
+  const app = createApp(App);
 
-    dayjs.extend(relativeTime);
+  app.config.globalProperties.$router = router;
+  // app.config.globalProperties.$store = store
+  app.config.compilerOptions.isCustomElement = tag => {
+    return tag.startsWith('ui3n-');
+  };
 
-    app
-      .use(pinia)
-      .use<I18nOptions>(i18n, { lang: 'en', messages: { en } })
-      .use(vueBus)
-      .use(dialogs)
-      .use(notifications)
-      .use(router)
-      .mount('#main');
-  });
-};
+  dayjs.extend(relativeTime);
 
-init();
+  app
+    .use(pinia)
+    .use<I18nOptions>(i18n, { lang: 'en', messages: { en } })
+    .use(vueBus)
+    .use(dialogs)
+    .use(notifications)
+    .use(router)
+    .mount('#main');
+});

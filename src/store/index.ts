@@ -15,5 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 export * from './app.store';
+export * from './fs.store';
 export * from './favoririte.store';
 export * from './fs-entity.store';
+export * from './run-mode-info.store';

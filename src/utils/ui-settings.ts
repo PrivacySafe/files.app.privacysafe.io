@@ -72,6 +72,11 @@ export class UISettings implements AppConfigs, AppConfigsInternal {
     return colorTheme;
   }
 
+  async getSystemFoldersDisplaying(): Promise<boolean> {
+    const { systemFoldersDisplaying } = await this.file.readJSON<SettingsJSON>();
+    return systemFoldersDisplaying;
+  }
+
   watchConfig(obs: web3n.Observer<AppConfig>): () => void {
     return this.file.watch({
       next: obs.next
@@ -79,7 +84,8 @@ export class UISettings implements AppConfigs, AppConfigsInternal {
             if (event.type === 'file-change') {
               const lang = await this.getCurrentLanguage();
               const colorTheme = await this.getCurrentColorTheme();
-              obs.next!({ lang, colorTheme });
+              const systemFoldersDisplaying = await this.getSystemFoldersDisplaying();
+              obs.next!({ lang, colorTheme, systemFoldersDisplaying });
             }
           }
         : undefined,

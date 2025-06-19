@@ -19,7 +19,8 @@
   import get from 'lodash/get';
   import { type Nullable, Ui3nCheckbox, Ui3nEditable, Ui3nIcon } from '@v1nt1248/3nclient-lib';
   import { getFileExtension, formatFileSize } from '@v1nt1248/3nclient-lib/utils';
-  import { useDblClickHandler } from '@/components/composables/useDblClickHandler';
+  import { useDblClickHandler } from '@/composables/useDblClickHandler';
+  import { useAbilities } from '@/composables/useAbilities';
   import type { ListingEntryExtended } from '@/types';
   import { FsTableRowProps, FsTableRowEmits } from './types';
   import FileType from '@/components/common/file-type/file-type.vue';
@@ -31,6 +32,8 @@
 
   const editNameMode = ref<boolean>(false);
 
+  const currentTableWindow = computed(() => `${props.window}` as '1' | '2');
+
   const fileExtension = computed(() => {
     if (props.row.type !== 'file') {
       return '';
@@ -38,6 +41,8 @@
 
     return getFileExtension(props.row.name).toLowerCase();
   });
+
+  const { canRename, canSetUnsetFavorite, canCopyMove } = useAbilities(currentTableWindow);
 
   function onDblClick() {
     if (props.row.type === 'folder') {
@@ -80,7 +85,7 @@
       (disabled || readonly) && $style.fsTableRowDisabled,
       isDroppable && $style.droppable
     ]"
-    :draggable="isRowSelected && !editNameMode"
+    :draggable="isRowSelected && !editNameMode && canCopyMove"
     @click="handleDblClick"
   >
     <div
@@ -126,7 +131,7 @@
       <ui3n-editable
         :model-value="row.name"
         disallow-empty-value
-        :disabled="disabled || readonly"
+        :disabled="!canRename || disabled || readonly"
         @toggle:edit-mode="editNameMode = $event"
         @update:model-value="updateName"
       />
@@ -137,7 +142,7 @@
       :style="getFieldStyle('type')"
     >
       <file-type
-        v-if="row.type !== 'folder'"
+        v-if="row.type === 'file'"
         :file-type="fileExtension"
       />
 
@@ -159,7 +164,7 @@
     </div>
 
     <ui3n-icon
-      v-if="row.type === 'folder' && !disabled"
+      v-if="row.type === 'folder' && !disabled && canSetUnsetFavorite"
       icon="round-bookmark"
       width="12"
       height="12"
@@ -172,11 +177,11 @@
 
 <style lang="scss" module>
   .fsTableRow {
-    --fsTableRow-height: 28px;
+    --fs-table-row-height: 28px;
 
     position: relative;
     width: 100%;
-    height: var(--fsTableRow-height);
+    height: var(--fs-table-row-height);
     display: flex;
     justify-content: flex-start;
     align-items: center;
@@ -207,6 +212,12 @@
         }
       }
     }
+  }
+
+  .fsTableRowDisabled {
+    pointer-events: none;
+    opacity: 0.5;
+    cursor: default;
   }
 
   .droppable {

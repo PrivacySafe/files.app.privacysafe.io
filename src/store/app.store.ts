@@ -14,22 +14,28 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { UISettings } from '@/utils/ui-settings';
+import type { Nullable } from '@v1nt1248/3nclient-lib';
 import type { AvailableLanguage, AvailableColorTheme, ConnectivityStatus, AppConfigs } from '@/types';
 
 export const useAppStore = defineStore('app', () => {
   const appVersion = ref<string>('');
   const connectivityStatus = ref<string>('offline');
-  const user = ref<string>('trash-folder');
+  const user = ref<Nullable<string>>(null);
   const lang = ref<AvailableLanguage>('en');
   const colorTheme = ref<AvailableColorTheme>('default');
   const appWindowSize = ref<{ width: number; height: number }>({
     width: 0,
     height: 0,
   });
+  // @ts-ignore
+  const operatingSystem = ref<'macos' | 'linux' | 'windows'>(navigator.userAgentData?.platform.toLowerCase());
+  const areSystemFoldersShowing = ref(false);
   const commonLoading = ref<boolean>(false);
+
+  const trashFolderName = computed(() => `.trash-folder-${user.value || ''}`);
 
   async function getAppVersion() {
     const v = await w3n.myVersion();
@@ -77,13 +83,19 @@ export const useAppStore = defineStore('app', () => {
     htmlEl.classList.add(curColorThemeCssClass);
   }
 
+  function setSystemFoldersDisplaying(value: boolean) {
+    areSystemFoldersShowing.value = value;
+  }
+
   async function getAppConfig(): Promise<AppConfigs | undefined> {
     try {
       const config = await UISettings.makeResourceReader();
       const langVal = await config.getCurrentLanguage();
       const colorTheme = await config.getCurrentColorTheme();
+      const systemFoldersDisplaying = await config.getSystemFoldersDisplaying();
       setLang(langVal);
       setColorTheme(colorTheme);
+      setSystemFoldersDisplaying(systemFoldersDisplaying);
 
       return config;
     } catch (e) {
@@ -93,12 +105,15 @@ export const useAppStore = defineStore('app', () => {
 
   return {
     appVersion,
+    operatingSystem,
     connectivityStatus,
     user,
     lang,
     colorTheme,
     appWindowSize,
+    areSystemFoldersShowing,
     commonLoading,
+    trashFolderName,
     getAppVersion,
     getConnectivityStatus,
     getUser,
@@ -106,6 +121,7 @@ export const useAppStore = defineStore('app', () => {
     setCommonLoading,
     setLang,
     setColorTheme,
+    setSystemFoldersDisplaying,
     getAppConfig,
   };
 });

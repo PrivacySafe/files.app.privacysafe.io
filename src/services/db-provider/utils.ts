@@ -18,6 +18,7 @@ export function objectFromQueryExecResult<T>(sqlResult: QueryExecResult): Array<
 export function favoriteValueToSqlInsertParams(value: FavoriteFolder) {
   return {
     $id: value.id,
+    $fsId: value.fsId,
     $fullPath: value.fullPath,
   };
 }

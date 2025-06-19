@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2021 - 2022 3NSoft Inc.
+ Copyright (C) 2021 - 2022, 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -39,14 +39,41 @@ declare namespace web3n.testing {
 	interface TestStand extends BasicTestStand {
 		staticTestInfo(): Promise<StaticTestInfo>;
 		idOfTestUser(userNum: number): Promise<string>;
+
+		/**
+		 * Starts listening for test signals from test process, that should
+		 * different from this one.
+		 * @param observer 
+		 * @param userNum identifies user that should be listen for test signals.
+		 * Value undefined means this user.
+		 * @param appDomain identifies app that should be listen for test signals.
+		 * Value undefined means this app.
+		 * @param component identifies app component that should be listen for
+		 * test signals. Value undefined means this app component.
+		 */
 		observeMsgsFromOtherLocalTestProcess(
-			userNum: number|undefined, appDomain: string|undefined,
-			component: string|undefined, observer: Observer<any>
+			observer: Observer<any>, userNum: number|undefined,
+			appDomain: string|undefined, component: string|undefined
 		): () => void;
+
+		/**
+		 * Sends test signal message to test process, that should different from
+		 * this one.
+		 * @param userNum identifies user that should be listen for test signals.
+		 * Value undefined means this user.
+		 * @param appDomain identifies app that should be listen for test signals.
+		 * Value undefined means this app.
+		 * @param component identifies app component that should be listen for
+		 * test signals. Value undefined means this app component.
+		 * @param msg is a test signal message content itself. It can be anything
+		 * JSON-ifiable.
+		 */
 		sendMsgToOtherLocalTestProcess(
 			userNum: number|undefined, appDomain: string|undefined,
 			component: string|undefined, msg: any
 		): Promise<void>;
+
+		focusThisWindow?: () => Promise<void>;
 	}
 
 	type TestRecordType = 'tests-start' |

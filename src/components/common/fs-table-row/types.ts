@@ -7,6 +7,7 @@ export interface FsTableRowProps<K extends string & keyof ListingEntryExtended> 
   isDroppable?: boolean;
   columnStyle?: { [P in Omit<K, 'id'> as string | number]: Record<string, string> };
   events?: { select: (row: ListingEntryExtended, withoutEvents?: boolean) => void };
+  window: 1 | 2;
   readonly?: boolean;
   disabled?: boolean;
 }

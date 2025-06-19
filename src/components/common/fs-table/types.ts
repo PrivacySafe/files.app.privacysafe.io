@@ -1,17 +1,19 @@
 import { VNode } from 'vue';
 import { type Nullable, Ui3nTable } from '@v1nt1248/3nclient-lib';
 import type { ListingEntryExtended } from '@/types';
-import type { FsPathObject } from '@/components/common/fs-page-toolbar/types';
 
 export interface FsTableProps {
-  name: string;
-  basePath?: FsPathObject;
+  fsId: string;
+  window: 1 | 2;
+  basePath?: {
+    fullPath: string;
+    title: string;
+  };
   path: string;
   isInSplitMode?: boolean;
   isInDraggingMode?: boolean;
   isActive?: boolean;
   isLoading?: boolean;
-  isTrashFolder?: boolean;
 }
 
 export interface FsTableEmits {
@@ -29,7 +31,15 @@ export interface FsTableEmits {
 
   (event: 'drag:start'): void;
 
-  (event: 'drag:end', value: { data: Nullable<ListingEntryExtended[]>; target: Nullable<ListingEntryExtended> }): void;
+  (
+    event: 'drag:end',
+    value: {
+      sourceFsId: Nullable<string>;
+      data: Nullable<ListingEntryExtended[]>;
+      targetFsId: Nullable<string>;
+      target: Nullable<ListingEntryExtended>;
+    },
+  ): void;
 
   (event: 'drag:stop'): void;
 }

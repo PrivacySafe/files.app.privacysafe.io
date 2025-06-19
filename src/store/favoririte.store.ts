@@ -47,9 +47,15 @@ export const useFavoriteStore = defineStore('favorite', () => {
     }
   }
 
-  async function addFavoriteFolder(fullPath: string): Promise<string | undefined> {
+  async function addFavoriteFolder({
+    fsId,
+    fullPath,
+  }: {
+    fsId: string;
+    fullPath: string;
+  }): Promise<string | undefined> {
     try {
-      const favFolderId = await dbSrv.addFavorite(fullPath);
+      const favFolderId = await dbSrv.addFavorite({ fsId, fullPath });
       await getFavoriteFolderList();
       return favFolderId;
     } catch (e) {
@@ -57,9 +63,17 @@ export const useFavoriteStore = defineStore('favorite', () => {
     }
   }
 
-  async function updateFavoriteFolder(id: string, fullPath: string): Promise<void> {
+  async function updateFavoriteFolder({
+    fsId,
+    id,
+    fullPath,
+  }: {
+    fsId: string;
+    id: string;
+    fullPath: string;
+  }): Promise<void> {
     try {
-      await dbSrv.updateFavorite(id, fullPath);
+      await dbSrv.updateFavorite({ fsId, id, fullPath });
       await getFavoriteFolderList();
     } catch (e) {
       w3n.log('error', `Failed to update favorite folder [${fullPath}]`, e);

@@ -23,42 +23,38 @@
 /// <reference path="./connectivity.d.ts" />
 /// <reference path="./rpc.d.ts" />
 /// <reference path="./ui.d.ts" />
+/// <reference path="./manifest.d.ts" />
 /// <reference path="./media.d.ts" />
 /// <reference path="./test-stand.d.ts" />
 
 declare namespace web3n.caps {
+  /**
+   * This is a definition of capabilities' object, injected into the DOM.
+   * One has to ensure that any particular capability is given, before trying
+   * to use it.
+   */
+  interface W3N extends caps.common.W3N {
+    /**
+     * closeSelf closes current component instance, which is self in the
+     * context.
+     */
+    closeSelf: () => void;
 
-	/**
-	 * This is a definition of capabilities' object, injected into the DOM.
-	 * One has to ensure that any particular capability is given, before trying
-	 * to use it.
-	 */
-	interface W3N extends caps.common.W3N {
+    /**
+     * myVersion returns version of current app.
+     */
+    myVersion: () => Promise<string>;
 
-		/**
-		 * closeSelf closes current component instance, which is self in the
-		 * context.
-		 */
-		closeSelf: () => void;
+    ui: ui.UI;
 
-		/**
-		 * myVersion returns version of current app.
-		 */
-		myVersion: () => Promise<string>;
+    // idea for lifecycle methods
+    // lifecycle: {
+    //   addListener: (event, hook) => void;
+    // };
 
-		// idea for lifecycle methods
-		// lifecycle: {
-		//   addListener: (event, hook) => void;
-		// };
-
-		logout?: Logout;
-		shell?: shell.ShellCAPs;
-		rpc?: rpc.RPC;
-		connectivity?: connectivity.Connectivity;
-		mediaDevices?: media.MediaDevices;
-
-	}
-
-	type Logout = (closePlatform: boolean) => Promise<void>;
-
+    shell?: shell.ShellCAPs;
+    rpc?: rpc.RPC;
+    connectivity?: connectivity.Connectivity;
+    mediaDevices?: media.MediaDevices;
+  }
 }

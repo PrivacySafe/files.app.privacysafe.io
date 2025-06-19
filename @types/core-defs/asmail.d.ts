@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016, 2020, 2022, 2024 3NSoft Inc.
+ Copyright (C) 2016, 2020, 2022, 2024 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -19,9 +19,9 @@
  * This is a namespace for things used by mail functionality.
  */
 declare namespace web3n.asmail {
-	
+
 	interface Service {
-		
+
 		/**
 		 * This returns a promise resolvable to id (address) of a current signed
 		 * user.
@@ -29,9 +29,18 @@ declare namespace web3n.asmail {
 		getUserId(): Promise<string>;
 
 		inbox: InboxService;
-		
+	
 		delivery: DeliveryService;
 
+		config: ASMailConfigService;
+
+	}
+
+	interface PreFlightOnlyService {
+		getUserId: Service['getUserId'];
+		delivery: {
+			preFlight: DeliveryService['preFlight'];
+		}
 	}
 
 	interface DeliveryProgress {
@@ -56,7 +65,7 @@ declare namespace web3n.asmail {
 		};
 	}
 
-	type DeliveryException = ASMailSendException | ServLocException | ASMailSendException;
+	type DeliveryException = ASMailSendException | ServLocException;
 
 	interface DeliveryOptions {
 		/**
@@ -80,7 +89,7 @@ declare namespace web3n.asmail {
 	}
 
 	interface DeliveryService {
-		
+	
 		/**
 		 * This returns a promise, resolvable to an allowable total size of a
 		 * message
@@ -318,5 +327,68 @@ declare namespace web3n.asmail {
 		// errors that are due to this side
 		msgCancelled?: true;
 	}
+
+	interface ASMailConfigService {
+		getOnServer<P extends keyof ASMailConfigParams>(
+			param: P
+		): Promise<ASMailConfigParams[P]|null>;
+		setOnServer<P extends keyof ASMailConfigParams>(
+			param: P,
+			value: ASMailConfigParams[P]|null
+		): Promise<void>;
+	}
+
+	interface ASMailConfigParams {
+
+		/**
+		 * Introductory public key certificate chain, published on ASMail server for
+		 * anyone to initiate messaging with the user.
+		 */
+		"init-pub-key": keys.PKeyCertChain;
+
+		/**
+		 * Policy that ASMail server should follow with messages from senders
+		 * authenticated to server.
+		 */
+		"auth-sender/policy": {
+			acceptWithInvitesOnly: boolean;
+			acceptFromWhiteListOnly: boolean;
+			applyBlackList: boolean;
+			defaultMsgSize: number;
+		};
+
+		"auth-sender/whitelist": AddressesList;
+		"auth-sender/blacklist": AddressesList;
+		"auth-sender/invites": InvitesList;
+
+		/**
+		 * Policy that ASMail server should follow with messages from senders
+		 * anonymous to server.
+		 */
+		"anon-sender/policy": {
+			accept: boolean;
+			acceptWithInvitesOnly: boolean;
+			defaultMsgSize: number;
+		};
+
+		"anon-sender/invites": InvitesList;
+
+	}
+
+	/**
+	 * Addresses list is a map from addresses to respective maximum message size
+	 * in bytes.
+	 */
+	interface AddressesList {
+		[address: string]: number;
+	}	
+
+	/**
+	 * Invites list is a map from invites to respective maximum message size in
+	 * bytes.
+	 */
+	interface InvitesList {
+		[invite: string]: number;
+	}	
 
 }

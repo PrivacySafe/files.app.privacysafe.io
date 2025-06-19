@@ -14,19 +14,18 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import { cloudFileSystemOperations } from '@/services/cloud-file-system-operations';
 import { dbProvider } from '@/services/db-provider';
-import type { CloudFileSystemOperations, DBProvider } from '@/types';
+import { initializeUserSyncedFs } from '@/services/file-system-operations/initialize-user-synced-fs';
+import type { DBProvider } from '@/types';
 
-export let cloudFileSystemSrv: CloudFileSystemOperations;
 export let dbSrv: DBProvider;
 
 export async function initializationServices() {
   try {
-    cloudFileSystemSrv = await cloudFileSystemOperations();
+    await initializeUserSyncedFs();
     dbSrv = await dbProvider();
-    console.info('\n--- initializationServices DONE---\n');
+    console.info('<- SERVICES ARE INITIALIZED ->');
   } catch (e) {
-    console.error('\nERROR into initializationServices: ', e);
+    console.error('# ERROR WHILE SERVICES INITIALISE # ', e);
   }
 }

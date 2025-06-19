@@ -14,10 +14,8 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import type { WritableFS } from '@/types';
-
 export default class CommonFs<T extends 'local' | 'synced'> {
-  private fsI: WritableFS | undefined = undefined;
+  private fsI: web3n.files.WritableFS | undefined = undefined;
   public readonly id: number = 0;
   public readonly fsName: string = '';
 
@@ -30,7 +28,7 @@ export default class CommonFs<T extends 'local' | 'synced'> {
     this.id = Date.now();
   }
 
-  public async getFs(): Promise<WritableFS | undefined> {
+  public async getFs(): Promise<web3n.files.WritableFS | undefined> {
     if (!this.fsI) {
       await this.initFs();
     }

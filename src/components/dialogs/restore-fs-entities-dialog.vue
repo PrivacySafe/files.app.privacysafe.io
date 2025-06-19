@@ -1,7 +1,7 @@
 <script lang="ts" setup>
   import { computed, inject } from 'vue';
   import size from 'lodash/size';
-  import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
+  import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
   import { Ui3nButton } from '@v1nt1248/3nclient-lib';
   import ConfirmationDialog from './confirmation-dialog.vue';
 
@@ -12,7 +12,7 @@
   });
   const emits = defineEmits(['close', 'select', 'confirm']);
 
-  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+  const { $tr } = inject(I18N_KEY)!;
 
   const mainText = computed(() => size(props.entityNames) > 1
     ? $tr('fs.entity.restore.plural.main.text', { name: props.entityNames.join(', ') })

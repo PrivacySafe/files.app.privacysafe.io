@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2024-2025 3NSoft Inc.
+ Copyright (C) 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -14,28 +14,42 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
-import Dashboard from '@/views/dashboard.vue';
-import HomeFolder from '@/views/home/home.vue';
-import RecentFolder from '@/views/recent.vue';
-import TrashFolder from '@/views/trash/trash.vue';
+import { createRouter, createWebHashHistory, RouteRecordRaw } from 'vue-router';
+import { APP_ROUTES } from '@/constants';
+import { useFsStore } from '@/store/fs.store';
+import Dashboard from '@/pages/dashboard/dashboard.vue';
+import FsFolder from '@/pages/fs-folder/fs-folder.vue';
 
 const routes: RouteRecordRaw[] = [
-  { path: '/', redirect: '/dashboard/home' },
-  { path: '/index.html', redirect: '/dashboard/home' },
+  { path: '/', redirect: '/dashboard/single/user-synced/user-synced-root' },
+  { path: '/index.html', redirect: '/dashboard/single/user-synced/user-synced-root' },
   {
     path: '/dashboard',
-    name: 'dashboard',
+    name: APP_ROUTES.DASHBOARD,
     component: Dashboard,
+    beforeEnter: async () => {
+      const fsStore = useFsStore();
+      await fsStore.initializeFsItems();
+    },
     children: [
-      { path: 'home', name: 'folder-home', component: HomeFolder },
-      { path: 'recent', name: 'folder-recent', component: RecentFolder },
-      { path: 'trash', name: 'folder-trash', component: TrashFolder },
+      {
+        path: 'single/:fsId/:folderId',
+        name: APP_ROUTES.SINGLE,
+        component: FsFolder,
+      },
+      {
+        path: 'double/:fsId/:folderId/:fs2Id/:folder2Id',
+        name: APP_ROUTES.DOUBLE,
+        components: {
+          default: FsFolder,
+          second: FsFolder,
+        },
+      },
     ],
   },
 ];
 
 export const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHashHistory(),
   routes,
 });

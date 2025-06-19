@@ -1,6 +1,6 @@
 <script lang="ts" setup>
   import { computed, inject, ref, watch } from 'vue';
-  import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
+  import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
   import { Ui3nDropFiles, Ui3nIcon, Ui3nInputFile, Ui3nProgressLinear, Ui3nHtml } from '@v1nt1248/3nclient-lib';
   import { getRandomId, getFileExtension, formatFileSize } from '@v1nt1248/3nclient-lib/utils';
   import FileType from '@/components/common/file-type/file-type.vue';
@@ -11,12 +11,21 @@
     currentFolder: string;
   }>();
 
-  const currentFolderName = computed(() => props.currentFolder ? props.currentFolder.replaceAll('/', ' / ') : 'Home');
+  const emits = defineEmits<{
+    (event: 'close'): void;
+    (event: 'select', value: File[]): void;
+    (event: 'confirm'): void;
+  }>();
+
+  const { $tr } = inject(I18N_KEY)!;
 
   const files = ref<Record<string, File>>({});
   const isUploading = ref(false);
   const totalSize = ref<number>(0);
   const progress = ref<Record<string, number>>({});
+
+  const currentFolderName = computed(() => props.currentFolder ? props.currentFolder.replaceAll('/', ' / ') : 'Home');
+
   const uploadedSize = computed(() => Object.keys(progress.value).reduce((acc, id) => {
     const fileSize = files.value[id].size;
     const fileProgress = progress.value[id];
@@ -24,14 +33,6 @@
     acc += uploadedFileSize;
     return acc;
   }, 0));
-
-  const emits = defineEmits<{
-    (event: 'close'): void;
-    (event: 'select', value: File[]): void;
-    (event: 'confirm'): void;
-  }>();
-
-  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
 
   function updateProgress(ev: ProgressEvent, id: string): void {
     if (ev.lengthComputable) {

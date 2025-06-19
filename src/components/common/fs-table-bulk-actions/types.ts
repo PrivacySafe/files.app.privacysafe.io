@@ -1,6 +1,12 @@
 import type { ListingEntryExtended } from '@/types';
 
-export type FsTableBulkActionName = 'set:favorite' | 'copy/move' | 'download' | 'restore' | 'delete';
+export type FsTableBulkActionName =
+  | 'set:favorite'
+  | 'copy/move'
+  | 'download'
+  | 'restore'
+  | 'delete'
+  | 'delete:completely';
 
 export type FsTableBulkActions = Partial<
   Record<
@@ -14,7 +20,7 @@ export type FsTableBulkActions = Partial<
 >;
 
 export interface FsTableBulkActionsProps {
-  config: FsTableBulkActions;
+  window: 1 | 2;
   selectedRows: ListingEntryExtended[];
   isMoveMode?: boolean;
   disabled?: boolean;

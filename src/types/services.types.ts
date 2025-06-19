@@ -21,6 +21,7 @@ import type { ListingEntry, ListingEntryExtended } from '@/types';
 
 export type FavoriteFolder = {
   id: string;
+  fsId: string;
   fullPath: string;
 };
 
@@ -34,7 +35,7 @@ export interface FileLinkStoreService {
   deleteLink(fileId: string): Promise<void>;
 }
 
-export interface CloudFileSystemOperations {
+export interface FileSystemOperations {
   fs: web3n.files.WritableFS;
   trashFolderName: string;
 
@@ -70,11 +71,11 @@ export interface CloudFileSystemOperations {
 }
 
 export interface DBProvider {
-  addFavorite(fullPath: string, folderId?: string): Promise<string>;
+  addFavorite({ fsId, fullPath, folderId }: { fsId: string; fullPath: string; folderId?: string }): Promise<string>;
 
   getFavorites(): Promise<FavoriteFolder[]>;
 
-  updateFavorite(id: string, fullPath: string): Promise<void>;
+  updateFavorite({ fsId, id, fullPath }: { fsId: string; id: string; fullPath: string }): Promise<void>;
 
   deleteFavorite(id: string): Promise<FavoriteFolder[]>;
 }

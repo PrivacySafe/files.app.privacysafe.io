@@ -24,8 +24,15 @@ import type { ListingEntryExtended, RouteDouble, RouteSingle } from '@/types';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
 
 export const useRunModeInfoStore = defineStore('run-mode-info', () => {
-  const { route, isSplittedMode, isTileView, activeWindow, navigateToRouteSingle, navigateToRouteDouble } =
-    useNavigation();
+  const {
+    route,
+    isSplittedMode,
+    isTileView,
+    activeWindow,
+    navigateToRouteSingle,
+    navigateToRouteDouble,
+    selectActiveWindow,
+  } = useNavigation();
 
   const { setCommonLoading, $emitter, $i18n, $createNotice } = useAppStore();
 
@@ -33,6 +40,7 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
 
   const isDragging = ref(false);
   const isMoveMode = ref(false);
+  const isMoveModeQuick = ref(false);
 
   const processedPath = computed(() => {
     const { path = '', path2 = '' } = route.query as RouteDouble['query'];
@@ -66,32 +74,35 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
     isMoveMode.value = val;
   }
 
-  async function toggleMode() {
-    if (isSplittedMode.value) {
-      const { fsId, folderId } = route.params as RouteDouble['params'];
-      const { path } = route.query as RouteDouble['query'];
+  async function toggleView() {
+    const newView = isTileView.value ? 'table' : 'tile';
 
+    if (isSplittedMode.value) {
+      return navigateToRouteDouble({
+        query: { view: newView },
+      });
+    }
+
+    return navigateToRouteSingle({
+      query: { view: newView },
+    });
+  }
+
+  async function toggleMode() {
+    const { fsId, folderId } = route.params as RouteSingle['params'] | RouteDouble['params'];
+    const { path } = route.query as RouteSingle['query'] | RouteDouble['query'];
+
+    if (isSplittedMode.value) {
       return navigateToRouteSingle({
         params: { fsId, folderId },
         query: { path },
       });
     }
 
-    const { fsId, folderId } = route.params as RouteSingle['params'];
-    const { path } = route.query as RouteSingle['query'];
-
     return navigateToRouteDouble({
       params: { fsId, folderId, fs2Id: fsId, folder2Id: folderId },
       query: { path, path2: '', activeWindow: '1' },
     });
-  }
-
-  async function selectActiveWindow(val: 1 | 2) {
-    if (activeWindow.value !== `${val}`) {
-      await navigateToRouteDouble({
-        query: { activeWindow: `${val}` },
-      });
-    }
   }
 
   async function deleteSelectedEntities({
@@ -116,7 +127,7 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
     }
   }
 
-  async function onDragStart(window: 1 | 2) {
+  async function onDragStart(window: 1 | '1' | 2 | '2') {
     await selectActiveWindow(window);
     isDragging.value = true;
   }
@@ -146,19 +157,21 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
         entities: data!,
         targetFsId: targetFsId!,
         target: target!,
-        moveMode: isMoveMode.value,
+        moveMode: isMoveMode.value || isMoveModeQuick.value,
       });
 
       $emitter.emit('drag:end', void 0);
       $emitter.emit('refresh:data', void 0);
 
-      const successMessageSingle = isMoveMode.value
-        ? $i18n.tr('fs.entity.move.single.message.success')
-        : $i18n.tr('fs.entity.copy.single.message.success');
+      const successMessageSingle =
+        isMoveMode.value || isMoveModeQuick.value
+          ? $i18n.tr('fs.entity.move.single.message.success')
+          : $i18n.tr('fs.entity.copy.single.message.success');
 
-      const successMessageMulti = isMoveMode.value
-        ? $i18n.tr('fs.entity.move.plural.message.success', { count: `${size(data)}` })
-        : $i18n.tr('fs.entity.copy.plural.message.success', { count: `${size(data)}` });
+      const successMessageMulti =
+        isMoveMode.value || isMoveModeQuick.value
+          ? $i18n.tr('fs.entity.move.plural.message.success', { count: `${size(data)}` })
+          : $i18n.tr('fs.entity.copy.plural.message.success', { count: `${size(data)}` });
 
       $createNotice({
         type: 'success',
@@ -168,13 +181,15 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
     } catch (e) {
       console.error(e);
 
-      const errorMessageSingle = isMoveMode.value
-        ? $i18n.tr('fs.entity.move.single.message.error')
-        : $i18n.tr('fs.entity.copy.single.message.error');
+      const errorMessageSingle =
+        isMoveMode.value || isMoveModeQuick.value
+          ? $i18n.tr('fs.entity.move.single.message.error')
+          : $i18n.tr('fs.entity.copy.single.message.error');
 
-      const errorMessageMulti = isMoveMode.value
-        ? $i18n.tr('fs.entity.move.plural.message.error', { count: `${size(data)}` })
-        : $i18n.tr('fs.entity.copy.plural.message.error', { count: `${size(data)}` });
+      const errorMessageMulti =
+        isMoveMode.value || isMoveModeQuick.value
+          ? $i18n.tr('fs.entity.move.plural.message.error', { count: `${size(data)}` })
+          : $i18n.tr('fs.entity.copy.plural.message.error', { count: `${size(data)}` });
 
       $createNotice({
         type: 'error',
@@ -182,7 +197,7 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
         content: size(data) > 1 ? errorMessageMulti : errorMessageSingle,
       });
     } finally {
-      isMoveMode.value = false;
+      toggleCopyMoveMode(false);
       setCommonLoading(false);
     }
   }
@@ -190,6 +205,7 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
   return {
     isDragging,
     isMoveMode,
+    isMoveModeQuick,
     isTileView,
     isSplittedMode,
     activeWindow,
@@ -200,8 +216,8 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
     isCurrentRootFsFolderTrash,
     isCurrentRootFsFolderSystem,
     toggleCopyMoveMode,
+    toggleView,
     toggleMode,
-    selectActiveWindow,
     deleteSelectedEntities,
     onDragStart,
     onDragEnd,

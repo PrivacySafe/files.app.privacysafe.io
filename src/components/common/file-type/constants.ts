@@ -54,6 +54,6 @@ export const FILE_TYPE_COLORS: Record<string, { bg: string; color: string }> = {
 };
 
 export const FILE_TYPE_COLOR_DEFAULT = {
-  bg: 'var(--color-bg-control-secondary-default)',
+  bg: 'var(--color-bg-control-secondary-pressed)',
   color: 'var(--color-text-control-primary-default)',
 };

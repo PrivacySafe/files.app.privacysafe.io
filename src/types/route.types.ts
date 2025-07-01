@@ -7,7 +7,6 @@ export interface RouteSingle {
   query: {
     view?: 'table' | 'tile';
     path: string;
-    path2?: string;
     activeWindow?: '1';
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';

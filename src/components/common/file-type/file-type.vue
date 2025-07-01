@@ -14,6 +14,7 @@
 
 <template>
   <ui3n-chip
+    :class="$style.fileType"
     :round="false"
     height="14"
     max-width="80"
@@ -24,3 +25,13 @@
     {{ type }}
   </ui3n-chip>
 </template>
+
+<style lang="scss" module>
+  .fileType {
+    border-radius: 3px;
+
+    div:last-child {
+      line-height: 14px !important;
+    }
+  }
+</style>

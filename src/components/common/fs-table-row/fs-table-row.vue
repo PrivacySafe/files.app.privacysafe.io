@@ -17,7 +17,7 @@
 <script setup lang="ts">
   import { computed, ref } from 'vue';
   import get from 'lodash/get';
-  import { type Nullable, Ui3nCheckbox, Ui3nEditable, Ui3nIcon } from '@v1nt1248/3nclient-lib';
+  import { type Nullable, Ui3nEditable, Ui3nIcon } from '@v1nt1248/3nclient-lib';
   import { getFileExtension, formatFileSize } from '@v1nt1248/3nclient-lib/utils';
   import { useDblClickHandler } from '@/composables/useDblClickHandler';
   import { useAbilities } from '@/composables/useAbilities';
@@ -32,8 +32,6 @@
 
   const editNameMode = ref<boolean>(false);
 
-  const currentTableWindow = computed(() => `${props.window}` as '1' | '2');
-
   const fileExtension = computed(() => {
     if (props.row.type !== 'file') {
       return '';
@@ -42,7 +40,7 @@
     return getFileExtension(props.row.name).toLowerCase();
   });
 
-  const { canRename, canSetUnsetFavorite, canCopyMove } = useAbilities(currentTableWindow);
+  const { canRename, canSetUnsetFavorite, canCopyMove } = useAbilities();
 
   function onDblClick() {
     if (props.row.type === 'folder') {
@@ -56,8 +54,13 @@
     emits('action', { event: 'open:info', payload: { row: props.row } });
   }
 
-  function selectRow() {
-    props.events?.select(props.row)
+  function selectRow(ev: MouseEvent) {
+    const { shiftKey } = ev;
+    if (shiftKey) {
+      emits('select:multiple');
+    } else {
+      props.events?.select(props.row);
+    }
   }
 
   function getFieldStyle(field: keyof ListingEntryExtended): Record<string, string> {
@@ -85,7 +88,7 @@
       (disabled || readonly) && $style.fsTableRowDisabled,
       isDroppable && $style.droppable
     ]"
-    :draggable="isRowSelected && !editNameMode && canCopyMove"
+    :draggable="!editNameMode && canCopyMove(rootFolderId)"
     @click="handleDblClick"
   >
     <div
@@ -96,9 +99,12 @@
         :class="$style.icon"
         @click.stop.prevent="selectRow"
       >
-        <ui3n-checkbox
+        <ui3n-icon
           v-if="isRowSelected"
-          :model-value="true"
+          icon="round-check-box"
+          :width="20"
+          :height="20"
+          color="var(--color-icon-control-accent-default)"
         />
 
         <template v-else>
@@ -122,6 +128,8 @@
             <ui3n-icon
               :class="$style.iconType"
               :icon="row.type === 'folder' ? 'round-folder' : 'round-subject'"
+              :width="20"
+              :height="20"
               color="var(--color-icon-table-secondary-default)"
             />
           </template>
@@ -131,7 +139,7 @@
       <ui3n-editable
         :model-value="row.name"
         disallow-empty-value
-        :disabled="!canRename || disabled || readonly"
+        :disabled="!canRename(fsId, rootFolderId) || disabled || readonly"
         @toggle:edit-mode="editNameMode = $event"
         @update:model-value="updateName"
       />
@@ -164,7 +172,7 @@
     </div>
 
     <ui3n-icon
-      v-if="row.type === 'folder' && !disabled && canSetUnsetFavorite"
+      v-if="row.type === 'folder' && !disabled && canSetUnsetFavorite(fsId, rootFolderId)"
       icon="round-bookmark"
       width="12"
       height="12"
@@ -252,15 +260,13 @@
 
   .icon {
     position: relative;
-    min-width: var(--spacing-m);
-    width: var(--spacing-m);
-    height: var(--spacing-m);
+    min-width: 20px;
+    width: 20px;
+    height: 20px;
   }
 
   .iconCheck {
     position: relative;
-    left: -2px;
-    top: -2px;
     display: none !important;
   }
 

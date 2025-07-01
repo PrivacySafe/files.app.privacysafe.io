@@ -69,10 +69,13 @@ export interface ListingEntryExtended extends web3n.files.Stats {
   name: string;
   fullPath: string;
   type: 'folder' | 'file' | 'link';
-  id?: string;
+  id: string;
   favoriteId?: string;
   tags?: string[];
   parentFolder?: string;
   ext?: string;
+  thumbnail?: string;
   displayingCTime?: string;
 }
+
+export type FsFolderEntityEvent = 'go' | 'rename' | 'update:favorite' | 'open:info';

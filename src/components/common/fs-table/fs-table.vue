@@ -16,28 +16,28 @@
 -->
 <script lang="ts" setup>
   import { computed, type ComputedRef, inject, onBeforeMount, onBeforeUnmount, ref, watch } from 'vue';
-  import { storeToRefs } from 'pinia';
   import size from 'lodash/size';
   import isEmpty from 'lodash/isEmpty';
+  import cloneDeep from 'lodash/cloneDeep';
   import { I18N_KEY, VUEBUS_KEY, VueBusPlugin } from '@v1nt1248/3nclient-lib/plugins';
   import {
-    Ui3nDropFiles,
-    Ui3nIcon,
-    Ui3nInputFile,
     Ui3nTable,
     Ui3nTooltip,
     type Ui3nTableProps,
-    type Ui3nTableSort,
+    type Ui3nTableExpose,
     type Nullable,
   } from '@v1nt1248/3nclient-lib';
-  import { useNavigation } from '@/composables/useNavigation';
+  import { useFsWindowState } from '@/composables/useFsWindowState';
+  import { useFsDnD } from '@/composables/useFsDnD';
   import { useAbilities } from '@/composables/useAbilities';
   import { useFsTable } from './useFsTable';
-  import { useFsStore, useFsEntryStore } from '@/store';
-  import type { AppGlobalEvents, ListingEntryExtended, RouteSingle, RouteDouble } from '@/types';
+  import { useFsEntryStore } from '@/store';
+  import { AppGlobalEvents, ListingEntryExtended, FsFolderEntityEvent } from '@/types';
   import type { FsTableProps, FsTableEmits, FsTableSlots } from './types';
-  import type { FsTableRowEvents, FsTableRowProps } from '@/components/common/fs-table-row/types';
+  import type { FsTableRowProps } from '@/components/common/fs-table-row/types';
   import FsTableRow from '@/components/common/fs-table-row/fs-table-row.vue';
+  import OsFilesDropArea from '@/components/common/os-files-drop-area/os-files-drop-area.vue';
+  import FsEntitiesDropArea from '@/components/common/fs-entities-drop-area/fs-entities-drop-area.vue';
 
   const props = withDefaults(defineProps<FsTableProps>(), {
     basePath: () => ({ fullPath: '', title: 'Home' }),
@@ -48,74 +48,31 @@
   const bus = inject<VueBusPlugin<AppGlobalEvents>>(VUEBUS_KEY)!;
   const { $tr } = inject(I18N_KEY)!;
 
-  const { route, isSplittedMode, navigateToRouteSingle, navigateToRouteDouble } = useNavigation();
-  const { prepareFolderDataTable, getGhostElementText, sortFolderData } = useFsTable();
+  const currentTableWindow = computed(() => `${props.window}`) as ComputedRef<'1' | '2'>;
 
-  const { fsList } = storeToRefs(useFsStore());
+  const {
+    currentWindowFs,
+    currentWindowSortConfig,
+    isTrashFolderInCurrentWindow,
+    isSystemFolderInCurrentWindow,
+  } = useFsWindowState(currentTableWindow);
+
+  const { changeSort, prepareFolderDataTable, sortFolderData } = useFsTable(currentTableWindow);
 
   const {
     getFolderContentFilledList,
     setFolderAsFavorite,
     unsetFolderAsFavorite,
     renameEntity,
-    saveFileBaseOnOsFileSystemFile,
   } = useFsEntryStore();
 
   const table = ref<Nullable<HTMLDivElement>>(null);
-  const tableComponent = ref<Nullable<typeof Ui3nTable>>(null);
+  const tableComponent = ref<Nullable<Ui3nTableExpose<ListingEntryExtended>>>(null);
   const folderData = ref<Ui3nTableProps<ListingEntryExtended> | null>(null);
-
-  const draggedRows = ref<string[]>([]);
-  const droppableRow = ref<Nullable<string>>(null);
-  const ghostEl = ref<Nullable<HTMLDivElement>>(null);
-
-  const currentTableWindow = computed(() => `${props.window}` as '1' | '2');
-  const isCurrentTableForTrashFolder = computed(() => {
-    if (isSplittedMode.value) {
-      return props.window === 1
-        ? route.params.fsId === 'user-synced' && route.params.folderId.includes('-trash')
-        : route.params.fs2Id === 'user-synced' && route.params.folder2Id.includes('-trash');
-    }
-
-    return route.params.fsId === 'user-synced' && route.params.folderId.includes('-trash');
-  });
-  const isCurrentTableForSystemFolder = computed(() => {
-    if (isSplittedMode.value) {
-      return props.window === 1
-        ? route.params.fsId.includes('system-')
-        : route.params.fs2Id.includes('system-');
-    }
-
-    return route.params.fsId.includes('system-');
-  });
 
   const isNoDataInFolder = computed(() => isEmpty(folderData.value?.body?.content));
 
-  // @ts-ignore
-  const selectedFsEntities = computed(() => tableComponent.value?.selectedRowsArray as ListingEntryExtended[]);
-
-  const sortConfig = computed(() => {
-    if (props.isInSplitMode) {
-      const {
-        sortBy = 'name',
-        sortOrder = 'desc',
-        sort2By = 'name',
-        sort2Order = 'desc',
-      } = route.query as RouteDouble['query'];
-      return {
-        field: props.window === 1 ? sortBy : sort2By,
-        direction: props.window === 1 ? sortOrder : sort2Order,
-      };
-    }
-
-    const { sortBy = 'name', sortOrder = 'desc' } = route.query as RouteSingle['query'];
-    return {
-      field: sortBy,
-      direction: sortOrder,
-    };
-  }) as ComputedRef<Ui3nTableSort<ListingEntryExtended>>;
-
-  const currentFs = computed(() => Object.values(fsList.value).find(fs => fs.fsId === props.fsId));
+  const selectedFsEntities = computed(() => tableComponent.value?.selectedRowsArray || [] as ListingEntryExtended[]);
 
   const pathInfo = computed(() => props.path
     ? `${props.basePath.title}/${props.path}`
@@ -123,65 +80,48 @@
   );
 
   const sortedFolderDataBody = computed(() => {
-    const { field, direction } = sortConfig.value;
-    const sortingField = (
-      field === 'displayingCTime' ? 'ctime' : field === 'type' ? 'ext' : field
-    ) as keyof ListingEntryExtended;
-
-    return (folderData.value?.body?.content || []).sort((a, b) => sortFolderData(a, b, sortingField, direction));
+    const { field, direction } = currentWindowSortConfig.value;
+    return (folderData.value?.body?.content || []).sort((a, b) => sortFolderData(a, b, field, direction));
   }) as ComputedRef<ListingEntryExtended[]>;
 
-  const { canDrop } = useAbilities(currentTableWindow);
+  const { canDrop } = useAbilities();
 
+  const {
+    draggedEntities,
+    droppableEntity,
+    onDragstart,
+    onDragend,
+    isDroppable,
+    onDragleave,
+    onDrop,
+  } = useFsDnD(currentTableWindow, selectedFsEntities);
+
+  function isRowSelected(row: ListingEntryExtended): boolean {
+    return ((tableComponent.value?.selectedRows || []) as string[]).includes(row.id);
+  }
+
+  function onSelectMultiple(rowIndex: number) {
+    if (!isEmpty(tableComponent.value!.selectedRows)) {
+      const firstSelectedEntityId = (tableComponent.value!.selectedRows as string[])[0];
+      const firstSelectedEntityIndex = sortedFolderDataBody.value.findIndex(e => e.id === firstSelectedEntityId);
+
+      if (firstSelectedEntityIndex <= rowIndex) {
+        tableComponent.value!.selectedRows = cloneDeep(sortedFolderDataBody.value
+          .slice(firstSelectedEntityIndex, rowIndex + 1)
+          .map(e => e.id));
+      } else {
+        const newValue = [firstSelectedEntityId];
+        newValue.push(...sortedFolderDataBody.value.slice(rowIndex, firstSelectedEntityIndex).map(e => e.id));
+        tableComponent.value!.selectedRows = newValue;
+      }
+    }
+  }
 
   function closeGroupActionsRow() {
-    // @ts-ignore
     tableComponent.value && tableComponent.value.closeGroupActionsRow();
   }
 
-  async function changeSort(val: Ui3nTableSort<ListingEntryExtended>) {
-    if (props.isInSplitMode) {
-      await navigateToRouteDouble({
-        query: {
-          ...(props.window === 1 && {
-            sortBy: val.field,
-            sortOrder: val.direction,
-          }),
-          ...(props.window === 2 && {
-            sort2By: val.field,
-            sort2Order: val.direction,
-          }),
-        },
-      });
-    } else {
-      await navigateToRouteSingle({
-        query: {
-          sortBy: val.field,
-          sortOrder: val.direction,
-        },
-      });
-    }
-  }
-
-  async function onFilesSelect(value: File[] | FileList) {
-    try {
-      emits('loading', true);
-      const files = [...value] as File[];
-      for (const file of files) {
-        await saveFileBaseOnOsFileSystemFile({
-          fsId: props.fsId,
-          uploadedFile: file,
-          folderPath: props.path,
-          withThumbnail: true,
-        });
-      }
-      bus.$emitter.emit('upload:file', { fsId: props.fsId, fullPath: props.path });
-    } finally {
-      emits('loading', false);
-    }
-  }
-
-  async function handleActions(action: { event: FsTableRowEvents; payload?: unknown }) {
+  async function handleActions(action: { event: FsFolderEntityEvent; payload?: unknown }) {
     const { event, payload } = action;
     switch (event) {
       case 'go': {
@@ -193,7 +133,7 @@
       }
 
       case 'rename': {
-        if (isCurrentTableForTrashFolder.value || isCurrentTableForSystemFolder.value) return;
+        if (isTrashFolderInCurrentWindow.value || isSystemFolderInCurrentWindow.value) return;
 
         const { row, newName } = payload as { row: ListingEntryExtended, newName: string };
         await renameEntity({ fsId: props.fsId, entity: row, newName });
@@ -202,7 +142,7 @@
       }
 
       case 'update:favorite': {
-        if (isCurrentTableForTrashFolder.value || isCurrentTableForSystemFolder.value) return;
+        if (isTrashFolderInCurrentWindow.value || isSystemFolderInCurrentWindow.value) return;
 
         const { favoriteId, fullPath } = (payload as { row: ListingEntryExtended }).row;
         if (favoriteId) {
@@ -215,7 +155,7 @@
       }
 
       case 'open:info': {
-        if (isCurrentTableForTrashFolder.value) return;
+        if (isTrashFolderInCurrentWindow.value) return;
 
         // @ts-ignore
         if (size(tableComponent.value?.selectedRowsArray as ListingEntryExtended[]) > 1) {
@@ -237,83 +177,12 @@
         basePath: props.basePath.fullPath,
       }) || [];
       folderData.value = prepareFolderDataTable(data, props.fsId, $tr);
-      // @ts-ignore
       tableComponent.value && tableComponent.value!.closeGroupActionsRow();
     } catch (error) {
       console.error(error);
     } finally {
       emits('loading', false);
     }
-  }
-
-  function onDragstart(ev: DragEvent, row: ListingEntryExtended) {
-    if (ev.dataTransfer) {
-      const data = size(selectedFsEntities.value) > 1
-        ? JSON.stringify({ fsId: props.fsId, value: selectedFsEntities.value })
-        : JSON.stringify({ fsId: props.fsId, value: [row] });
-
-      draggedRows.value = size(selectedFsEntities.value) > 1
-        ? selectedFsEntities.value.map(r => r.fullPath)
-        : [row.fullPath];
-
-      const ghostElText = getGhostElementText(selectedFsEntities.value);
-
-      ghostEl.value = document.getElementById('app-dragging-ghost')!.cloneNode(true) as HTMLDivElement;
-      const ghostElContent = ghostEl.value.querySelector('span');
-      ghostElContent!.innerText = ghostElText;
-      document.body.appendChild(ghostEl.value);
-
-      ev.dataTransfer.setData('text/plain', data);
-      ev.dataTransfer.effectAllowed = 'copyMove';
-      ev.dataTransfer.setDragImage(ghostEl.value!, -8, 0);
-
-      emits('drag:start');
-    }
-  }
-
-  function onDragend() {
-    droppableRow.value = null;
-    draggedRows.value = [];
-    ghostEl.value && document.body.removeChild(ghostEl.value);
-    ghostEl.value = null;
-    emits('drag:stop');
-  }
-
-  function isDroppable(ev: DragEvent, row: ListingEntryExtended): void {
-    if (row.type === 'folder') {
-      droppableRow.value = row.fullPath;
-      ev.preventDefault();
-    } else {
-      droppableRow.value = null;
-    }
-  }
-
-  function onDragleave(ev: DragEvent, row: ListingEntryExtended): void {
-    if (droppableRow.value && droppableRow.value === row.fullPath) {
-      droppableRow.value = null;
-    }
-    ev.preventDefault();
-  }
-
-  function onDrop(ev: DragEvent, row: ListingEntryExtended): void {
-    const sourceAsString = ev.dataTransfer?.getData('text/plain');
-    const source: Nullable<{
-      fsId: string;
-      value: ListingEntryExtended[]
-    }> = sourceAsString ? JSON.parse(sourceAsString) : null;
-
-    const target = !draggedRows.value.includes(row.fullPath) ? row : null;
-
-    emits('drag:end', {
-      sourceFsId: source?.fsId || null,
-      data: source?.value || null,
-      targetFsId: props.fsId,
-      target,
-    });
-
-    droppableRow.value = null;
-    draggedRows.value = [];
-    ev.preventDefault();
   }
 
   onBeforeMount(async () => {
@@ -336,7 +205,7 @@
     () => tableComponent.value,
     () => {
       if (tableComponent.value) {
-        emits('init', tableComponent.value);
+        emits('init', tableComponent.value!);
       }
     },
     { immediate: true },
@@ -369,7 +238,6 @@
     :class="[
       $style.fsTable,
       isInSplitMode && $style.fsTableInSplitMode,
-      // @ts-ignore
       tableComponent?.hasGroupActionsRow && $style.fsTableShort,
       isActive && $style.fsTableActive
     ]"
@@ -379,7 +247,7 @@
       ref="tableComponent"
       :config="{
         ...folderData.config,
-        sortOrder: sortConfig,
+        sortOrder: currentWindowSortConfig,
       }"
       :head="folderData.head"
       :body="{ content: sortedFolderDataBody }"
@@ -393,22 +261,25 @@
         />
       </template>
 
-      <template #row="{ row, columnStyle, rowIndex, isRowSelected, events }">
+      <template #row="{ row, columnStyle, rowIndex, events }">
         <fs-table-row
+          :fs-id="fsId"
+          :root-folder-id="rootFolderId"
           :row="row"
           :row-index="rowIndex"
-          :is-row-selected="isRowSelected"
+          :is-row-selected="isRowSelected(row)"
           :is-droppable="
-            !isCurrentTableForSystemFolder
-              && !!droppableRow
-              && row.fullPath === droppableRow
-              && !draggedRows.includes(row.fullPath)
-              && canDrop
+            !isSystemFolderInCurrentWindow
+              && !!droppableEntity
+              && row.fullPath === droppableEntity
+              && !draggedEntities.includes(row.fullPath)
+              && canDrop(fsId, rootFolderId)
           "
           :column-style="columnStyle"
           :events="events"
           :window="window"
           @action="handleActions"
+          @select:multiple="onSelectMultiple(rowIndex)"
           @dragstart="onDragstart($event, row)"
           @dragend="onDragend()"
           @dragenter="isDroppable($event, row)"
@@ -419,53 +290,35 @@
       </template>
 
       <template #unused-place>
-        <div
-          v-if="(!isCurrentTableForTrashFolder && !isCurrentTableForSystemFolder) && isNoDataInFolder && !isInDraggingMode"
-          :class="$style.noData"
-        >
-          <ui3n-drop-files
-            :title="$tr('app.upload.text')"
-            permanent-display
-            @select="onFilesSelect"
+        <template v-if="!isTrashFolderInCurrentWindow && !isSystemFolderInCurrentWindow">
+          <div
+            v-if="isNoDataInFolder && !isInDraggingMode"
+            :class="$style.noData"
           >
-            <template #additional-text>
-              <div :class="$style.noDataText">
-                <span>{{ $tr('table.folder.empty.text') }}</span>&nbsp;
-                <ui3n-input-file
-                  multiple
-                  :button-text="$tr('app.upload.file.text')"
-                  @update:model-value="onFilesSelect"
-                />
-              </div>
-            </template>
-          </ui3n-drop-files>
-        </div>
+            <os-files-drop-area
+              :fs-id="fsId"
+              :path="path"
+              :is-empty-folder-mode="true"
+              @loading="emits('loading', $event)"
+            />
+          </div>
 
-        <div
-          v-if="(!isCurrentTableForTrashFolder && !isCurrentTableForSystemFolder) && isInSplitMode && !isActive && isInDraggingMode"
-          :class="[
-            $style.droppablePlace,
-            !!droppableRow && droppableRow === (path || '/') && $style.droppablePlaceShow
-          ]"
-          @dragend="onDragend()"
-          @dragenter="isDroppable($event, { type: 'folder', fullPath: path || '/' } as ListingEntryExtended)"
-          @dragover="isDroppable($event, { type: 'folder', fullPath: path || '/' } as ListingEntryExtended)"
-          @dragleave="onDragleave($event, { type: 'folder', fullPath: path || '/' } as ListingEntryExtended)"
-          @drop="onDrop($event, { type: 'folder', fullPath: path || '/' } as ListingEntryExtended)"
-        >
-          <ui3n-icon
-            icon="round-system-update-alt"
-            :width="48"
-            :height="48"
-            :rotate="-90"
-            color="var(--color-icon-control-accent-default)"
+          <fs-entities-drop-area
+            v-if="isInSplitMode && !isActive && isInDraggingMode"
+            :path="path || '/'"
+            :droppable-entity="droppableEntity"
+            @dragend="onDragend"
+            @dragenter="ev => isDroppable(ev, { type: 'folder', fullPath: path || '/' } as ListingEntryExtended)"
+            @dragover="ev => isDroppable(ev, { type: 'folder', fullPath: path || '/' } as ListingEntryExtended)"
+            @dragleave="ev => onDragleave(ev, { type: 'folder', fullPath: path || '/' } as ListingEntryExtended)"
+            @drop="ev => onDrop(ev, { type: 'folder', fullPath: path || '/' } as ListingEntryExtended)"
           />
-        </div>
+        </template>
       </template>
 
       <template #no-data>
         <div
-          v-if="isCurrentTableForTrashFolder || isCurrentTableForSystemFolder"
+          v-if="isTrashFolderInCurrentWindow || isSystemFolderInCurrentWindow"
           :class="$style.noData"
         >
           <div :class="$style.trashNoData">
@@ -484,7 +337,7 @@
         position-strategy="fixed"
         placement="top"
       >
-        <span><b>[{{ currentFs?.name }}]</b> {{ pathInfo.replaceAll('/', ' / ') }}</span>
+        <span><b>[{{ currentWindowFs?.name }}]</b> {{ pathInfo.replaceAll('/', ' / ') }}</span>
       </ui3n-tooltip>
     </div>
   </div>
@@ -539,30 +392,6 @@
     position: relative;
     width: 100%;
     height: 100%;
-
-    & > div:first-child {
-      div {
-        h3 {
-          display: none;
-        }
-      }
-    }
-  }
-
-  .noDataText {
-    font-size: var(--font-12);
-    font-weight: 500;
-    line-height: var(--font-16);
-    color: var(--color-text-control-secondary-default);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    column-gap: var(--space-xs);
-
-    span {
-      display: inline-block;
-      user-select: none;
-    }
   }
 
   .trashNoData {

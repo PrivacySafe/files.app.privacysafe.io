@@ -1,6 +1,7 @@
 import { getFileExtension } from '@v1nt1248/3nclient-lib/utils';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
 import type { ListingEntryExtended } from '@/types';
+import { prepareFsEntityId } from './utils';
 
 export async function loadFsEntityStats(
   fs: web3n.files.WritableFS,
@@ -20,7 +21,8 @@ export async function loadFsEntityStats(
 
   const name = fullPath.split('/').pop() || '';
   const stats = await fs!.stat(fullPath);
-  const id = isThisFsDevice ? undefined : ((await fs!.getXAttr(fullPath, 'id')) as string | undefined);
+
+  const id = prepareFsEntityId(fs, fullPath);
   const tags = isThisFsDevice ? [] : ((await fs!.getXAttr(fullPath, 'tags')) as string[] | undefined);
   const favoriteId = isThisFsDevice ? undefined : ((await fs!.getXAttr(fullPath, 'favoriteId')) as string | undefined);
   const thumbnail = isThisFsDevice ? undefined : ((await fs!.getXAttr(fullPath, 'thumbnail')) as string | undefined);

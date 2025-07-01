@@ -52,8 +52,8 @@ export async function createFileBaseOnOsFileSystemFile({
       return;
     }
 
-    const isImage = isFileImage(type);
-    const isVideo = isFileVideo(type);
+    const isImage = isFileImage({ type });
+    const isVideo = isFileVideo({ type });
     let img: Nullable<string> = null;
 
     if (isImage) {

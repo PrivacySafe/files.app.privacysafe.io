@@ -17,6 +17,8 @@
 <script lang="ts" setup>
   import { storeToRefs } from 'pinia';
   import { Ui3nButton, Ui3nIcon, Ui3nMenu } from '@v1nt1248/3nclient-lib';
+  import { useNavigation } from '@/composables/useNavigation';
+  import { useFsWindowState } from '@/composables/useFsWindowState';
   import { useDashboard } from '@/composables/useDashboard';
   import { useAbilities } from '@/composables/useAbilities';
   import { useRunModeInfoStore } from '@/store';
@@ -24,9 +26,11 @@
   import FavoriteListItem from '@/components/pages/dashboard/favorite-list-item/favorite-list-item.vue';
   import DashboardToolbar from '@/components/common/dashboard-toolbar/dashboard-toolbar.vue';
 
+  const { isSplittedMode, isTileView, activeWindow } = useNavigation();
+
+  const { currentWindowFsId, currentWindowRootFolderId } = useFsWindowState(activeWindow);
+
   const {
-    isTileView,
-    isSplittedMode,
     areSystemFoldersShowing,
     userSyncedFsFolders,
     userDeviceFsFolders,
@@ -42,7 +46,7 @@
   const { canCreateFolder, canUpload } = useAbilities();
 
   const runModeInfoStore = useRunModeInfoStore();
-  const { isDragging, isMoveMode } = storeToRefs(runModeInfoStore);
+  const { isDragging, isMoveMode, isMoveModeQuick } = storeToRefs(runModeInfoStore);
 </script>
 
 <template>
@@ -79,7 +83,7 @@
               </div>
 
               <div
-                v-if="canUpload"
+                v-if="canUpload(currentWindowFsId, currentWindowRootFolderId)"
                 :class="$style.createContentItem"
                 @click="uploadFile"
               >
@@ -203,7 +207,7 @@
         color="var(--color-icon-table-accent-default)"
       />
 
-      {{ isMoveMode ? $tr('fs.entity.action.moving') : $tr('fs.entity.action.copying') }}
+      {{ (isMoveMode || isMoveModeQuick) ? $tr('fs.entity.action.moving') : $tr('fs.entity.action.copying') }}
     </div>
 
     <div

@@ -1,6 +1,8 @@
-import type { ListingEntryExtended } from '@/types';
+import type { FsFolderEntityEvent, ListingEntryExtended } from '@/types';
 
 export interface FsTableRowProps<K extends string & keyof ListingEntryExtended> {
+  fsId: string;
+  rootFolderId: string;
   row: ListingEntryExtended;
   rowIndex: number;
   isRowSelected?: boolean;
@@ -15,5 +17,6 @@ export interface FsTableRowProps<K extends string & keyof ListingEntryExtended> 
 export type FsTableRowEvents = 'go' | 'rename' | 'update:favorite' | 'open:info';
 
 export interface FsTableRowEmits {
-  (ev: 'action', value: { event: FsTableRowEvents; payload?: unknown }): void;
+  (event: 'action', value: { event: FsFolderEntityEvent; payload?: unknown }): void;
+  (event: 'select:multiple'): void;
 }

@@ -1,9 +1,12 @@
 import dayjs from 'dayjs';
-import size from 'lodash/size';
 import { Ui3nTableProps } from '@v1nt1248/3nclient-lib';
 import type { ListingEntryExtended } from '@/types';
+import { useFsFolder } from '@/composables/useFsFolder';
+import { ComputedRef } from 'vue';
 
-export function useFsTable() {
+export function useFsTable(tableWindow: ComputedRef<'1' | '2'>) {
+  const { changeSort, sortFolderData } = useFsFolder(tableWindow);
+
   function prepareFolderDataTable(
     data: ListingEntryExtended[],
     tableName: string,
@@ -39,39 +42,9 @@ export function useFsTable() {
     };
   }
 
-  function getGhostElementText(data: ListingEntryExtended[]): string {
-    if (size(data) === 0) return '';
-
-    const name = data[0].name;
-    const processedName = size(name) > 40 ? `${name.slice(0, 40)}...` : name;
-
-    return size(data) > 1 ? `${processedName} (+${size(data) - 1})` : processedName;
-  }
-
-  function sortFolderData(
-    a: ListingEntryExtended,
-    b: ListingEntryExtended,
-    field: keyof ListingEntryExtended,
-    direction: 'asc' | 'desc',
-  ): -1 | 1 {
-    const aFieldValue = field === 'ext' && a.type === 'file' ? `${a.ext}-${a.name}` : a[field]!;
-    const aFieldValueProcessed = typeof aFieldValue === 'string' ? aFieldValue.toLowerCase() : aFieldValue;
-
-    const bFieldValue = field === 'ext' && a.type === 'file' ? `${b.ext}-${b.name}` : b[field]!;
-    const bFieldValueProcessed = typeof bFieldValue === 'string' ? bFieldValue.toLowerCase() : bFieldValue;
-
-    return aFieldValueProcessed > bFieldValueProcessed
-      ? direction === 'desc'
-        ? 1
-        : -1
-      : direction === 'desc'
-        ? -1
-        : 1;
-  }
-
   return {
+    changeSort,
     prepareFolderDataTable,
-    getGhostElementText,
     sortFolderData,
   };
 }

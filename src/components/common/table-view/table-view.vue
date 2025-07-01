@@ -28,9 +28,10 @@
   import { storeToRefs } from 'pinia';
   import type { AppGlobalEvents, ListingEntryExtended } from '@/types';
   import { I18N_KEY, DIALOGS_KEY, VueBusPlugin, VUEBUS_KEY, NOTIFICATIONS_KEY } from '@v1nt1248/3nclient-lib/plugins';
-  import type { Nullable, Ui3nTable } from '@v1nt1248/3nclient-lib';
+  import type { Nullable, Ui3nTableExpose } from '@v1nt1248/3nclient-lib';
   import { useAppStore, useFsEntryStore, useRunModeInfoStore } from '@/store';
   import { useNavigation } from '@/composables/useNavigation';
+  import { END_OF_TRASH_FOLDER_ID } from '@/constants';
   import FsTable from '@/components/common/fs-table/fs-table.vue';
   import TableBulkActions from '@/components/common/fs-table-bulk-actions/fs-table-bulk-actions.vue';
   import type { FsTableBulkActionName } from '@/components/common/fs-table-bulk-actions/types';
@@ -55,6 +56,7 @@
     window2RootFolderId,
     navigateToRouteSingle,
     navigateToRouteDouble,
+    selectActiveWindow,
   } = useNavigation();
 
   const appStore = useAppStore();
@@ -64,10 +66,10 @@
   const { downloadEntities, restoreEntities } = useFsEntryStore();
 
   const runModeInfoStore = useRunModeInfoStore();
-  const { isDragging, isMoveMode } = storeToRefs(runModeInfoStore);
-  const { toggleCopyMoveMode, selectActiveWindow, deleteSelectedEntities, onDragStart, onDragEnd } = runModeInfoStore;
+  const { isDragging, isMoveMode, isMoveModeQuick } = storeToRefs(runModeInfoStore);
+  const { toggleCopyMoveMode, deleteSelectedEntities } = runModeInfoStore;
 
-  const tableComponent = ref<Nullable<typeof Ui3nTable>>();
+  const tableComponent = ref<Nullable<Ui3nTableExpose<ListingEntryExtended>>>(null);
   const displayedFsEntity = ref<string>('');
 
   const tableFsId = computed(() => {
@@ -78,7 +80,7 @@
     return window1FsId.value;
   }) as ComputedRef<string>;
 
-  const tableParentFolder = computed(() => {
+  const tableRootFolderId = computed(() => {
     if (isSplittedMode.value) {
       return props.window === 1 ? window1RootFolderId.value : window2RootFolderId.value;
     }
@@ -230,8 +232,9 @@
     <div :class="[$style.content, displayedFsEntity && !isSplittedMode && $style.narrow]">
       <fs-table
         :fs-id="tableFsId"
+        :root-folder-id="tableRootFolderId"
         :window="window"
-        :base-path="{ fullPath: tableParentFolder.includes('-trash') ? trashFolderName : '', title: '' }"
+        :base-path="{ fullPath: tableRootFolderId.includes(END_OF_TRASH_FOLDER_ID) ? trashFolderName : '', title: '' }"
         :path="currentProcessedPath"
         :is-in-split-mode="isSplittedMode"
         :is-in-dragging-mode="isDragging"
@@ -242,15 +245,16 @@
         @make:active="selectActiveWindow(window)"
         @go="go"
         @open:info="fsEntityInfoOpen"
-        @drag:start="onDragStart(window)"
-        @drag:end="onDragEnd"
-        @drag:stop="isDragging = false"
       >
         <template #group-actions="{ selectedRows }">
           <table-bulk-actions
+            :fs-id="tableFsId"
+            :root-folder-id="tableRootFolderId"
+            :folder-path="currentProcessedPath"
             :window="window"
-            :selected-rows="selectedRows"
+            :selected-entities="selectedRows"
             :is-move-mode="isMoveMode"
+            :is-move-mode-quick="isMoveModeQuick"
             :disabled="commonLoading"
             @action="handleBulkActions($event, selectedRows)"
             @update:move-mode="toggleCopyMoveMode"

@@ -20,7 +20,9 @@
   import { Ui3nButton, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
   import { useNavigation } from '@/composables/useNavigation';
   import { useAppStore, useFsStore, useRunModeInfoStore } from '@/store';
+  import { START_OF_SYSTEM_FS_ID } from '@/constants';
   import FsSystemsSelector from '@/components/common/dashboard-toolbar/fs-systems-selector.vue';
+  import SortingSelector from '@/components/common/dashboard-toolbar/sorting-selector.vue';
   import FolderPath from '@/components/common/dashboard-toolbar/folder-path.vue';
 
   const { isTileView, isSplittedMode, activeWindow, navigateToRouteSingle, navigateToRouteDouble } = useNavigation();
@@ -30,14 +32,14 @@
 
   const runModeInfoStore = useRunModeInfoStore();
   const { processedPath, currentFsId, isCurrentRootFsFolderTrash } = storeToRefs(runModeInfoStore);
-  const { toggleMode } = runModeInfoStore;
+  const { toggleView, toggleMode } = runModeInfoStore;
 
   const availableFileSystems = computed(() => Object.values(fsList.value).filter(fs => {
     if (areSystemFoldersShowing.value) {
       return true;
     }
 
-    return !fs.fsId.includes('system-');
+    return !fs.fsId.includes(START_OF_SYSTEM_FS_ID);
   }));
 
   function changeFs(id: string) {
@@ -63,8 +65,16 @@
 </script>
 
 <template>
-  <div :class="$style.dashboardToolbar">
-    <div :class="[$style.block, $style.breadcrumbsBlock, isCurrentRootFsFolderTrash && $style.breadcrumbsBlockLong]">
+  <div :class="[$style.dashboardToolbar, activeWindow === '2' && $style.reverse]">
+    <div
+      :class="[
+        $style.block,
+        activeWindow === '2' && $style.reverse,
+        $style.breadcrumbsBlock,
+        isTileView && $style.tileBreadcrumbsBlock,
+        isCurrentRootFsFolderTrash && $style.breadcrumbsBlockLong,
+      ]"
+    >
       <fs-systems-selector
         :model-value="currentFsId"
         :file-systems="availableFileSystems"
@@ -79,7 +89,12 @@
       </div>
     </div>
 
-    <div :class="$style.block">
+    <div :class="[$style.block, activeWindow === '2' && $style.reverse]">
+      <sorting-selector
+        v-if="isTileView"
+        :class="$style.withOffset"
+      />
+
       <ui3n-tooltip
         :content="isTileView ? $tr('dashboard.toolbar.table.view.tooltip') : $tr('dashboard.toolbar.tile.view.tooltip')"
         position-strategy="fixed"
@@ -90,7 +105,7 @@
           color="var(--color-bg-block-primary-default)"
           :icon="isTileView ? 'rectangles-two' : 'squares-four'"
           icon-color="var(--color-icon-button-secondary-default)"
-          :disabled="true"
+          @click="toggleView"
         />
       </ui3n-tooltip>
 
@@ -124,6 +139,10 @@
     column-gap: var(--spacing-s);
   }
 
+  .reverse {
+    flex-direction: row-reverse;
+  }
+
   .block {
     display: flex;
     justify-content: flex-start;
@@ -137,10 +156,18 @@
 
   .breadcrumbsBlock {
     width: calc(100% - 64px);
+
+    &.tileBreadcrumbsBlock {
+      width: calc(100% - 210px);
+    }
   }
 
   .breadcrumbsBlockLong {
     width: calc(100% - 32px);
+
+    &.tileBreadcrumbsBlock {
+      width: calc(100% - 180px);
+    }
   }
 
   .path {
@@ -148,5 +175,9 @@
     width: calc(100% - 220px);
     height: 100%;
     margin-left: var(--spacing-xs);
+  }
+
+  .withOffset {
+    margin-right: var(--spacing-xs);
   }
 </style>

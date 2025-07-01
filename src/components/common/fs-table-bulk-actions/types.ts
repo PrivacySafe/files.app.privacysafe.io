@@ -21,8 +21,12 @@ export type FsTableBulkActions = Partial<
 
 export interface FsTableBulkActionsProps {
   window: 1 | 2;
-  selectedRows: ListingEntryExtended[];
+  fsId: string;
+  rootFolderId: string;
+  folderPath: string;
+  selectedEntities: ListingEntryExtended[];
   isMoveMode?: boolean;
+  isMoveModeQuick?: boolean;
   disabled?: boolean;
 }
 

@@ -15,15 +15,16 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-  import { computed, inject, ref, onMounted, watch } from 'vue';
+  import { computed, inject, ref, watch } from 'vue';
   import dayjs from 'dayjs';
   import isEmpty from 'lodash/isEmpty';
   import { type Nullable, Ui3nButton, Ui3nChip, Ui3nIcon, Ui3nProgressCircular } from '@v1nt1248/3nclient-lib';
   import { I18N_KEY } from '@v1nt1248/3nclient-lib/plugins';
-  import { formatFileSize } from '@v1nt1248/3nclient-lib/utils';
+  import { formatFileSize, isFileImage, isFileVideo } from '@v1nt1248/3nclient-lib/utils';
   import { useFsEntryStore } from '@/store';
   import type { FsSEntityInfoProps, FsSEntityInfoEmits } from './types';
   import type { ListingEntryExtended } from '@/types';
+  import { createThumbnail } from '@/utils';
 
   const props = defineProps<FsSEntityInfoProps>();
   const emits = defineEmits<FsSEntityInfoEmits>();
@@ -97,17 +98,29 @@
     }
   }
 
-  onMounted(async () => {
-    await loadEntityStats(props.path);
-  });
-
   watch(
     () => props.path,
     async (val, oVal) => {
       if (val && val !== oVal) {
         await loadEntityStats(val);
+
+        const { type, thumbnail, ext } = entityStats.value!;
+        if (
+          type === 'file' && !thumbnail && (
+            isFileImage({ fullName: props.path.toLowerCase() })
+            || isFileVideo({ fullName: props.path.toLowerCase() })
+            || ext === 'pdf'
+          )
+        ) {
+          createThumbnail(props.fsId, props.path).then((val) => {
+            if (val) {
+              entityStats.value!.thumbnail = val;
+            }
+          });
+        }
       }
     },
+    { immediate: true },
   );
 </script>
 
@@ -161,22 +174,22 @@
 
     <div :class="$style.row">
       <span>{{ $tr('fs.entity.info.path') }}</span>
-      <div>{{ entityPath }} </div>
+      <div>{{ entityPath }}</div>
     </div>
 
     <div :class="$style.row">
       <span>{{ $tr('fs.entity.info.size') }}</span>
-      <div>{{ entitySize }} </div>
+      <div>{{ entitySize }}</div>
     </div>
 
     <div :class="$style.row">
       <span>{{ $tr('fs.entity.info.date') }}</span>
-      <div>{{ entityDate }} </div>
+      <div>{{ entityDate }}</div>
     </div>
 
     <div :class="$style.row">
       <span>{{ $tr('fs.entity.info.changes') }}</span>
-      <div>{{ entityChanges }} </div>
+      <div>{{ entityChanges }}</div>
     </div>
 
     <div :class="$style.row">

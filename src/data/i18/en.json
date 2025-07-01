@@ -5,6 +5,7 @@
   "app.status.connected.offline": "offline",
   "app.exit": "Exit",
   "app.create": "Create",
+  "app.selected": "Selected",
   "app.favorites.title": "Favorites",
   "app.create.folder.text": "Create Folder",
   "app.upload.file.text": "Upload File",
@@ -46,10 +47,13 @@
   "table.folder.empty.text": "The folder is empty, you can Drag & Drop files here or",
   "favorite.folder.missing.warning.text": "The favorite folder \"{path}\" you want to open is missing (maybe deleted or moved)",
   "favorite.folder.missing.warning.question": "Remove the selected folder from the favorites list?",
+  "dashboard.toolbar.shift.path.left": "Shift left",
+  "dashboard.toolbar.shift.path.right": "Shift right",
   "dashboard.toolbar.table.view.tooltip": "Table view",
   "dashboard.toolbar.tile.view.tooltip": "Tile view",
   "dashboard.toolbar.split.mode.tooltip": "Split mode",
   "dashboard.toolbar.simple.mode.tooltip": "Simple mode",
+  "fs.entity.sorting.text": "Sorting",
   "fs.entity.info.type": "Type",
   "fs.entity.info.type.folder": "Folder",
   "fs.entity.info.type.file": "File",
@@ -92,5 +96,7 @@
   "fs.entity.move.single.message.success": "The selected object has been successfully moved.",
   "fs.entity.move.plural.message.success": "The selected objects ({count}) have been successfully moved.",
   "fs.entity.move.single.message.error": "Error while moving the selected object.",
-  "fs.entity.move.plural.message.error": "Error while moving the selected objects ({count})."
+  "fs.entity.move.plural.message.error": "Error while moving the selected objects ({count}).",
+  "tile.view.header.text": "Click to Active",
+  "tile.view.header.text.active": "Active Panel"
 }

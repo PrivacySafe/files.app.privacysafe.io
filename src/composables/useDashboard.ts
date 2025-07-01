@@ -19,6 +19,7 @@ import { storeToRefs } from 'pinia';
 import { DIALOGS_KEY, I18N_KEY, VUEBUS_KEY, VueBusPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import { useNavigation } from '@/composables/useNavigation';
 import { useAppStore, useFsStore, useFavoriteStore, useFsEntryStore, useRunModeInfoStore } from '@/store';
+import { USER_FS, USER_DEVICE_FS, START_OF_SYSTEM_FS_ID } from '@/constants';
 import type { AppGlobalEvents, FavoriteFolder, RootFsFolderView } from '@/types';
 
 export function useDashboard() {
@@ -26,7 +27,7 @@ export function useDashboard() {
   const { $tr } = inject(I18N_KEY)!;
   const dialogs = inject(DIALOGS_KEY)!;
 
-  const { route, navigateToRouteSingle } = useNavigation();
+  const { navigateToRouteSingle } = useNavigation();
 
   const appStore = useAppStore();
   const { areSystemFoldersShowing } = storeToRefs(appStore);
@@ -43,12 +44,11 @@ export function useDashboard() {
   const { isEntityPresent, makeFolder, saveFileBaseOnOsFileSystemFile, removeFavoriteFolderFromList } = fsEntryStore;
 
   const runModeInfoStore = useRunModeInfoStore();
-  const { isTileView, isSplittedMode, activeWindow, processedPath, currentFsId, parentSelectedFolder } =
-    storeToRefs(runModeInfoStore);
+  const { processedPath, currentFsId, parentSelectedFolder } = storeToRefs(runModeInfoStore);
 
-  const userSyncedFsFolders = computed(() => fsFolderList.value.filter(f => f.fsId.includes('user-synced')));
-  const userDeviceFsFolders = computed(() => fsFolderList.value.filter(f => f.fsId.includes('user-device')));
-  const systemFsFolders = computed(() => fsFolderList.value.filter(f => f.fsId.includes('system-')));
+  const userSyncedFsFolders = computed(() => fsFolderList.value.filter(f => f.fsId.includes(USER_FS)));
+  const userDeviceFsFolders = computed(() => fsFolderList.value.filter(f => f.fsId.includes(USER_DEVICE_FS)));
+  const systemFsFolders = computed(() => fsFolderList.value.filter(f => f.fsId.includes(START_OF_SYSTEM_FS_ID)));
 
   function isFolderSelected(folder: RootFsFolderView) {
     return folder.id === parentSelectedFolder.value;
@@ -60,10 +60,7 @@ export function useDashboard() {
         fsId: folder.fsId,
         folderId: folder.id,
       },
-      query: {
-        view: isTileView.value ? 'tile' : 'table',
-        path: '',
-      },
+      query: { path: '' },
     });
 
     bus.$emitter.emit('click:breadcrumb', void 0);
@@ -148,10 +145,7 @@ export function useDashboard() {
           fsId,
           folderId: parentFolder!.id,
         },
-        query: {
-          path: fullPath,
-          view: isTileView.value ? 'tile' : 'table',
-        },
+        query: { path: fullPath },
       });
     } else {
       const component = defineAsyncComponent(() => import('@/components/dialogs/confirmation-dialog.vue'));
@@ -179,10 +173,6 @@ export function useDashboard() {
   });
 
   return {
-    route,
-    isTileView,
-    isSplittedMode,
-    activeWindow,
     areSystemFoldersShowing,
     processedFavoriteFolders,
     userSyncedFsFolders,

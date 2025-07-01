@@ -34,7 +34,7 @@ export function useAppView() {
     setAppWindowSize,
   } = appStore;
 
-  const appElement = ref<Element | null>(null);
+  const appElement = ref<HTMLDivElement | null>(null);
 
   const connectivityTimerId = ref<ReturnType<typeof setInterval> | undefined>();
 

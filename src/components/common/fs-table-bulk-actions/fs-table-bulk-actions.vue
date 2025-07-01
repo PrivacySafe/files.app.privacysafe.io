@@ -9,40 +9,19 @@
 
   const props = withDefaults(defineProps<FsTableBulkActionsProps>(), {
     window: 1,
-    selectedRows: () => [],
   });
   const emits = defineEmits<FsTableBulkActionsEmits>();
 
   const { $tr } = inject(I18N_KEY)!;
 
-  const isSelectedEmpty = computed(() => isEmpty(props.selectedRows));
-  const currentTableWindow = computed(() => `${props.window}` as '1' | '2');
+  const isSelectedEmpty = computed(() => isEmpty(props.selectedEntities));
 
-  const { canRestore, canDelete, canDeleteCompletely, canCopyMove } = useAbilities(currentTableWindow);
+  const { canRestore, canDelete, canDeleteCompletely, canCopyMove } = useAbilities();
 </script>
 
 <template>
   <div :class="$style.fsHomeTableBulkActions">
     <div :class="$style.actionsBlock">
-      <!--
-      <ui3n-tooltip
-        v-if="canSetUnsetFavorite"
-        :content="FS_TABLE_BULK_ACTIONS['set:favorite']?.tooltip || ''"
-        :disabled="!FS_TABLE_BULK_ACTIONS['set:favorite']?.tooltip"
-        position-strategy="fixed"
-        placement="top-start"
-      >
-        <ui3n-button
-          type="icon"
-          color="var(--color-bg-block-primary-default)"
-          :icon="FS_TABLE_BULK_ACTIONS['set:favorite']?.icon"
-          :icon-color="FS_TABLE_BULK_ACTIONS['set:favorite']?.iconColor ?? 'var(--color-icon-table-primary-default)'"
-          :disabled="disabled || isSelectedEmpty"
-          @click.stop.prevent="emits('action', { action: 'set:favorite' })"
-        />
-      </ui3n-tooltip>
-      -->
-
       <ui3n-tooltip
         :content="FS_TABLE_BULK_ACTIONS['download']?.tooltip || ''"
         :disabled="!FS_TABLE_BULK_ACTIONS['download']?.tooltip"
@@ -60,7 +39,7 @@
       </ui3n-tooltip>
 
       <ui3n-tooltip
-        v-if="canRestore"
+        v-if="canRestore(fsId, rootFolderId, folderPath)"
         :content="FS_TABLE_BULK_ACTIONS['restore']?.tooltip || ''"
         :disabled="!FS_TABLE_BULK_ACTIONS['restore']?.tooltip"
         position-strategy="fixed"
@@ -77,7 +56,7 @@
       </ui3n-tooltip>
 
       <ui3n-tooltip
-        v-if="canDelete"
+        v-if="canDelete(fsId, rootFolderId)"
         :content="FS_TABLE_BULK_ACTIONS['delete']?.tooltip || ''"
         :disabled="!FS_TABLE_BULK_ACTIONS['delete']?.tooltip"
         position-strategy="fixed"
@@ -94,7 +73,7 @@
       </ui3n-tooltip>
 
       <ui3n-tooltip
-        v-if="canDeleteCompletely"
+        v-if="canDeleteCompletely(fsId, rootFolderId, folderPath)"
         :content="FS_TABLE_BULK_ACTIONS['delete:completely']?.tooltip || ''"
         :disabled="!FS_TABLE_BULK_ACTIONS['delete:completely']?.tooltip"
         position-strategy="fixed"
@@ -124,7 +103,7 @@
         placement="top-end"
       >
         <ui3n-switch
-          :model-value="!!isMoveMode"
+          :model-value="!!isMoveMode || !isMoveModeQuick"
           :class="$style.copyMoveSwitcher"
           @update:model-value="emits('update:move-mode', $event)"
         />

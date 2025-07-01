@@ -405,6 +405,7 @@ export const useFsEntryStore = defineStore('fsEntry', () => {
 
   return {
     isEntityPresent,
+    getFs,
     updateEntityXAttrs,
     deleteEntityXAttrs,
     getEntityStats,

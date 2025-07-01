@@ -89,6 +89,7 @@
     align-items: center;
     padding: 0 var(--spacing-s);
     font-size: var(--font-13);
+    color: var(--color-text-control-primary-default);
 
     &:hover {
       background-color: var(--color-bg-control-primary-hover);

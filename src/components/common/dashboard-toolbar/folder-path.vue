@@ -21,7 +21,7 @@
   import size from 'lodash/size';
   import debounce from 'lodash/debounce';
   import { I18N_KEY, VUEBUS_KEY, VueBusPlugin } from '@v1nt1248/3nclient-lib/plugins';
-  import { Ui3nIcon, Ui3nResize, Ui3nRipple } from '@v1nt1248/3nclient-lib';
+  import { Ui3nIcon, Ui3nResize, Ui3nRipple, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
   import type { Nullable } from '@v1nt1248/3nclient-lib';
   import { useNavigation } from '@/composables/useNavigation';
   import { useFsStore, useRunModeInfoStore } from '@/store';
@@ -211,11 +211,17 @@
       :class="$style.btnLeft"
       @click.stop.prevent="shiftRight"
     >
-      <ui3n-icon
-        icon="round-keyboard-arrow-left"
-        width="24"
-        height="24"
-      />
+      <ui3n-tooltip
+        :content="$tr('dashboard.toolbar.shift.path.right')"
+        placement="top"
+        position-strategy="fixed"
+      >
+        <ui3n-icon
+          icon="round-keyboard-arrow-left"
+          width="24"
+          height="24"
+        />
+      </ui3n-tooltip>
     </div>
 
     <div
@@ -224,11 +230,17 @@
       :class="$style.btnRight"
       @click.stop.prevent="shiftLeft"
     >
-      <ui3n-icon
-        icon="round-keyboard-arrow-right"
-        width="24"
-        height="24"
-      />
+      <ui3n-tooltip
+        :content="$tr('dashboard.toolbar.shift.path.left')"
+        placement="top"
+        position-strategy="fixed"
+      >
+        <ui3n-icon
+          icon="round-keyboard-arrow-right"
+          width="24"
+          height="24"
+        />
+      </ui3n-tooltip>
     </div>
   </div>
 </template>

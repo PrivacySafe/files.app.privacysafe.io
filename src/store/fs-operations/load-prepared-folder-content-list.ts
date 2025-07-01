@@ -19,6 +19,7 @@ import { getFileExtension } from '@v1nt1248/3nclient-lib/utils';
 import { useAppStore } from '@/store/app.store';
 import { loadFolderContentList } from './load-folder-content-list';
 import { prepareFolderPath } from '@/utils';
+import { prepareFsEntityId } from './utils';
 import { ListingEntry, ListingEntryExtended } from '@/types';
 
 function whetherToProcessThisEntity(
@@ -56,11 +57,6 @@ export async function loadPreparedFolderContentList({
     }
 
     const isThisFsDevice = fs.type === 'device';
-    const processedFsName = fs.name
-      .replaceAll(' ', '_')
-      .replace(/[.*+?^$&{}()|[\]\\]/g, '')
-      .toLowerCase();
-    const compoundFsId = `${fs.type}-${processedFsName}`;
 
     const preparedList: ListingEntryExtended[] = [];
     for (const item of list) {
@@ -68,11 +64,14 @@ export async function loadPreparedFolderContentList({
         const compoundPath = prepareFolderPath([folderPath, item.name]);
         const stats = await fs!.stat(compoundPath);
 
-        const id = `${compoundFsId}-${compoundPath.replace(/[.*+?^$&{}()|/[\]\\]/g, '_')}`;
+        const id = prepareFsEntityId(fs, compoundPath);
         const tags = isThisFsDevice ? [] : ((await fs!.getXAttr(compoundPath, 'tags')) as string[] | undefined);
         const favoriteId = isThisFsDevice
           ? undefined
           : ((await fs!.getXAttr(compoundPath, 'favoriteId')) as string | undefined);
+        const thumbnail = isThisFsDevice
+          ? undefined
+          : ((await fs!.getXAttr(compoundPath, 'thumbnail')) as string | undefined);
         const parentFolder = isThisFsDevice
           ? ''
           : ((await fs!.getXAttr(compoundPath, 'parentFolder')) as string | undefined);
@@ -86,6 +85,7 @@ export async function loadPreparedFolderContentList({
           ext: item.isFile ? getFileExtension(item.name) : `@${item.isFolder ? 'folder' : 'link'}-${item.name}`,
           ...(favoriteId && { favoriteId }),
           ...(parentFolder && { parentFolder }),
+          ...(thumbnail && { thumbnail }),
           ...stats,
         });
       }

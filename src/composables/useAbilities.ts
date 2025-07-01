@@ -14,111 +14,76 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import { computed, type ComputedRef } from 'vue';
-import { useRoute } from 'vue-router';
-import type { Nullable } from '@v1nt1248/3nclient-lib';
-import { APP_ROUTES } from '@/constants';
+import { computed } from 'vue';
+import { useNavigation } from '@/composables/useNavigation';
+import {
+  USER_FS,
+  USER_DEVICE_FS,
+  END_OF_ROOT_FOLDER_ID,
+  END_OF_TRASH_FOLDER_ID,
+  START_OF_SYSTEM_FS_ID,
+} from '@/constants';
 
-const USER_FS = 'user-synced';
-const USER_DEVICE_FS = 'user-device';
-
-export function useAbilities(currentWindow?: ComputedRef<'1' | '2'>) {
-  const route = useRoute();
-
-  const isSplittedMode = computed(() => route.name === APP_ROUTES.DOUBLE);
-  const activeWindow = computed(() => (route.query.activeWindow || '1') as '1' | '2');
-
-  const fsId = computed(() => route.params.fsId as string);
-  const folderId = computed(() => route.params.folderId as string);
-
-  const fs2Id = computed(() => route.params.fs2Id || (null as Nullable<string>));
-  const folder2Id = computed(() => route.params.folder2Id || (null as Nullable<string>));
+export function useAbilities() {
+  const { isSplittedMode, activeWindow, window1FsId, window1RootFolderId, window2FsId, window2RootFolderId } =
+    useNavigation();
 
   const canCreateFolder = computed(() => {
     if ((isSplittedMode.value && activeWindow.value === '1') || !isSplittedMode.value) {
-      return (fsId.value === USER_FS && folderId.value.includes('-root')) || fsId.value === USER_DEVICE_FS;
+      return (
+        (window1FsId.value === USER_FS && window1RootFolderId.value.includes(END_OF_ROOT_FOLDER_ID)) ||
+        window1FsId.value === USER_DEVICE_FS
+      );
     }
 
-    return (fs2Id.value === USER_FS && folder2Id.value?.includes('-root')) || fs2Id.value === USER_DEVICE_FS;
+    return (
+      (window2FsId.value === USER_FS && window2RootFolderId.value?.includes(END_OF_ROOT_FOLDER_ID)) ||
+      window2FsId.value === USER_DEVICE_FS
+    );
   });
 
-  const canSetUnsetFavorite = computed(() => {
-    if (isSplittedMode.value) {
-      return currentWindow?.value === '1'
-        ? (fsId.value === USER_FS && folderId.value.includes('-root')) || fsId.value === USER_DEVICE_FS
-        : (fs2Id.value === USER_FS && folder2Id.value?.includes('-root')) || fs2Id.value === USER_DEVICE_FS;
-    }
+  function canSetUnsetFavorite(currentFsId: string, currentRootFolderId: string): boolean {
+    return (
+      (currentFsId === USER_FS && currentRootFolderId.includes(END_OF_ROOT_FOLDER_ID)) || currentFsId === USER_DEVICE_FS
+    );
+  }
 
-    return (fsId.value === USER_FS && folderId.value.includes('-root')) || fsId.value === USER_DEVICE_FS;
-  });
+  function canRestore(currentFsId: string, currentRootFolderId: string, currentFolderPath?: string): boolean {
+    return currentFsId === USER_FS && currentRootFolderId.includes(END_OF_TRASH_FOLDER_ID) && !currentFolderPath;
+  }
 
-  const canRestore = computed(() => {
-    if (isSplittedMode.value) {
-      return currentWindow?.value === '1'
-        ? fsId.value === USER_FS && folderId.value.includes('-trash') && !route.query.path
-        : fs2Id.value === USER_FS && folder2Id.value?.includes('-trash') && !route.query.path2;
-    }
+  function canDelete(currentFsId: string, currentRootFolderId: string): boolean {
+    return currentFsId === USER_FS && !currentRootFolderId.includes(END_OF_TRASH_FOLDER_ID);
+  }
 
-    return fsId.value === USER_FS && folderId.value.includes('-trash') && !route.query.path;
-  });
+  function canDeleteCompletely(currentFsId: string, currentRootFolderId: string, currentFolderPath?: string): boolean {
+    return currentFsId === USER_FS && currentRootFolderId.includes(END_OF_TRASH_FOLDER_ID)
+      ? !currentFolderPath
+      : !currentFsId.includes(START_OF_SYSTEM_FS_ID);
+  }
 
-  const canDelete = computed(() => {
-    if (isSplittedMode.value) {
-      return currentWindow?.value === '1'
-        ? fsId.value === USER_FS && !folderId.value.includes('-trash')
-        : fs2Id.value === USER_FS && !folder2Id.value?.includes('-trash');
-    }
+  function canUpload(currentFsId: string, currentRootFolderId: string): boolean {
+    return (
+      (currentFsId === USER_FS && currentRootFolderId.includes(END_OF_ROOT_FOLDER_ID)) || currentFsId === USER_DEVICE_FS
+    );
+  }
 
-    return fsId.value === USER_FS && !folderId.value.includes('-trash');
-  });
+  function canRename(currentFsId: string, currentRootFolderId: string): boolean {
+    return (
+      (currentFsId === USER_FS && currentRootFolderId.includes(END_OF_ROOT_FOLDER_ID)) || currentFsId === USER_DEVICE_FS
+    );
+  }
 
-  const canDeleteCompletely = computed(() => {
-    if (isSplittedMode.value) {
-      return currentWindow?.value === '1'
-        ? fsId.value === USER_FS && folderId.value.includes('-trash')
-          ? !route.query.path
-          : !fsId.value.includes('system-')
-        : fs2Id.value === USER_FS && !folder2Id.value?.includes('-trash')
-          ? !route.query.path2
-          : !fs2Id.value?.includes('system-');
-    }
+  function canCopyMove(currentRootFolderId: string): boolean {
+    return !currentRootFolderId.includes(END_OF_TRASH_FOLDER_ID);
+  }
 
-    return fsId.value === USER_FS && folderId.value.includes('-trash')
-      ? !route.query.path
-      : !fsId.value.includes('system-');
-  });
-
-  const canUpload = computed(() => {
-    if ((isSplittedMode.value && activeWindow.value === '1') || !isSplittedMode.value) {
-      return (fsId.value === USER_FS && folderId.value.includes('-root')) || fsId.value === USER_DEVICE_FS;
-    }
-
-    return (fs2Id.value === USER_FS && folder2Id.value?.includes('-root')) || fs2Id.value === USER_DEVICE_FS;
-  });
-
-  const canRename = computed(() => {
-    if ((isSplittedMode.value && activeWindow.value === '1') || !isSplittedMode.value) {
-      return (fsId.value === USER_FS && folderId.value.includes('-root')) || fsId.value === USER_DEVICE_FS;
-    }
-
-    return (fs2Id.value === USER_FS && folder2Id.value?.includes('-root')) || fs2Id.value === USER_DEVICE_FS;
-  });
-
-  const canCopyMove = computed(() => {
-    if (!isSplittedMode.value) return false;
-
-    return currentWindow?.value === '1'
-      ? fs2Id.value?.includes('user-') && !folder2Id.value?.includes('-trash')
-      : fsId.value?.includes('user-') && !folderId.value.includes('-trash');
-  });
-
-  const canDrop = computed(() => {
-    if (!isSplittedMode.value) return false;
-
-    return currentWindow?.value === '1'
-      ? fsId.value?.includes('user-') && !folderId.value.includes('-trash')
-      : fs2Id.value?.includes('user-') && !folder2Id.value?.includes('-trash');
-  });
+  function canDrop(currentFsId: string, currentRootFolderId: string): boolean {
+    return (
+      (currentFsId === USER_FS || currentFsId === USER_DEVICE_FS) &&
+      !currentRootFolderId.includes(END_OF_TRASH_FOLDER_ID)
+    );
+  }
 
   return {
     canCreateFolder,

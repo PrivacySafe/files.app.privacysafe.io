@@ -97,7 +97,13 @@
   } = useFsDnD(currentTableWindow, selectedFsEntities);
 
   function isRowSelected(row: ListingEntryExtended): boolean {
-    return ((tableComponent.value?.selectedRows || []) as string[]).includes(row.id);
+    if (!tableComponent.value || isEmpty(tableComponent.value?.selectedRows)) return false;
+
+    if (Array.isArray(tableComponent.value.selectedRows)) {
+      return tableComponent.value.selectedRows.includes(row.id);
+    }
+
+    return !![...tableComponent.value.selectedRows].find(e => e.id === row.id);
   }
 
   function onSelectMultiple(rowIndex: number) {

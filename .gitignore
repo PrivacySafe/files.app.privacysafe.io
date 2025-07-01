@@ -31,3 +31,4 @@ yarn-error.log*
 .~*
 /setup-w3n.bundle.js
 /pnpm-workspace.yaml
+!/test-user-creds-alone.json

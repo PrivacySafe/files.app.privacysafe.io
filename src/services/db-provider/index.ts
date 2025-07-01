@@ -96,7 +96,8 @@ export async function dbProvider(): Promise<DBProvider> {
       FROM sqlite_master
       WHERE type = 'table'
       AND name = 'favorites'`);
-    const res = objectFromQueryExecResult(sqlValue) as { name: string }[];
+
+    const res = (sqlValue ? objectFromQueryExecResult(sqlValue) : []) as { name: string }[];
 
     if (res[0]?.name === 'favorites') {
       const tableData = await getFavorites();

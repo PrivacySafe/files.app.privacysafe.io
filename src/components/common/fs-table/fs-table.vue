@@ -135,7 +135,7 @@
           ? (payload as string).replace(`${props.basePath.fullPath}/`, '')
           : payload as string;
         emits('go', path);
-        break;
+        return;
       }
 
       case 'rename': {
@@ -144,7 +144,7 @@
         const { row, newName } = payload as { row: ListingEntryExtended, newName: string };
         await renameEntity({ fsId: props.fsId, entity: row, newName });
         await loadFolderData();
-        break;
+        return;
       }
 
       case 'update:favorite': {
@@ -157,7 +157,7 @@
           await setFolderAsFavorite({ fsId: props.fsId, fullPath });
         }
         await loadFolderData();
-        break;
+        return;
       }
 
       case 'open:info': {
@@ -169,7 +169,25 @@
         }
 
         emits('open:info', (payload as FsTableRowProps<keyof ListingEntryExtended>).row.fullPath);
-        break;
+        return;
+      }
+
+      case 'go:linked-folder': {
+        // XXX TODO
+        console.warn(`This should read link, and open target folder. The second part requires some dance cause new fs should be added into fs.store`);
+        return;
+      }
+
+      case 'open:file': {
+        // XXX TODO
+        console.warn(`tell w3n.shell to open file when respective capability will be implemented`);
+        return;
+      }
+
+      case 'open:linked-file': {
+        // XXX TODO
+        console.warn(`This should read link, and tell w3n.shell to open target file when respective capability will be implemented`);
+        return;
       }
     }
   }

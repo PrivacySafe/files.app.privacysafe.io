@@ -63,6 +63,7 @@
   "fs.entity.info.date": "Created",
   "fs.entity.info.changes": "Updated",
   "fs.entity.info.tags": "Tags",
+  "fs.entity.info.calculate.hash": "Calculate hash",
   "fs.entity.copy": "Copy",
   "fs.entity.move": "Move",
   "fs.entity.action.copying": "Copying",

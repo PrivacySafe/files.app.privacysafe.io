@@ -21,6 +21,7 @@
   "dependencies": {
     "@v1nt1248/3nclient-lib": "0.2.21",
     "dayjs": "1.11.13",
+    "hash-wasm": "^4.12.0",
     "lodash": "4.17.21",
     "pdfjs-dist": "^4.10.38",
     "pinia": "3.0.3",

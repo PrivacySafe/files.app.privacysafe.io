@@ -78,4 +78,5 @@ export interface ListingEntryExtended extends web3n.files.Stats {
   displayingCTime?: string;
 }
 
-export type FsFolderEntityEvent = 'go' | 'rename' | 'update:favorite' | 'open:info';
+export type FsFolderEntityEvent = 'go' | 'go:linked-folder' | 'rename' | 'update:favorite' |
+'open:info' | 'open:file' | 'open:linked-file';

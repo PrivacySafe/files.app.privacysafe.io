@@ -153,7 +153,7 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
         const { entity, newName } = payload as { entity: ListingEntryExtended; newName: string };
         await renameEntity({ fsId: currentWindowFsId.value, entity, newName });
         await loadFolderData();
-        break;
+        return;
       }
 
       case 'update:favorite': {
@@ -166,7 +166,7 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
           await setFolderAsFavorite({ fsId: currentWindowFsId.value, fullPath });
         }
         await loadFolderData();
-        break;
+        return;
       }
     }
   }

@@ -26,7 +26,7 @@ export async function updateXAttrs({
   attrs: Record<string, any | undefined>;
 }) {
   try {
-    await fs!.updateXAttrs(path, {
+    await fs.updateXAttrs(path, {
       set: attrs,
     });
   } catch (e) {

@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-  import { computed, inject, ref, watch } from 'vue';
+  import { computed, inject, onBeforeUnmount, ref, watch } from 'vue';
   import dayjs from 'dayjs';
   import isEmpty from 'lodash/isEmpty';
   import { type Nullable, Ui3nButton, Ui3nChip, Ui3nIcon, Ui3nProgressCircular } from '@v1nt1248/3nclient-lib';
@@ -24,6 +24,7 @@
   import { useFsEntryStore } from '@/store';
   import type { FsSEntityInfoProps, FsSEntityInfoEmits } from './types';
   import type { ListingEntryExtended } from '@/types';
+  import { useFileHashing } from './useFileHashing';
   import { createThumbnail } from '@/utils';
 
   const props = defineProps<FsSEntityInfoProps>();
@@ -32,8 +33,27 @@
   const { $tr } = inject(I18N_KEY)!;
   const { getEntityStats } = useFsEntryStore();
 
-  const isLoading = ref(false);
   const entityStats = ref<Nullable<ListingEntryExtended & { thumbnail?: string }>>(null);
+
+  const fsIdValue = computed(() => props.fsId);
+  const pathValue = computed(() => props.path);
+
+  const {
+    sha256hex,
+    calculating256,
+    sha256progress,
+    sha512hex,
+    calculating512,
+    sha512progress,
+    calculateHash,
+    loadHashing,
+    stopHashingProcess,
+  } = useFileHashing(fsIdValue, pathValue, entityStats);
+
+  const canHash = computed(() => entityStats.value?.isFile
+    && entityStats.value?.mtime
+    && (typeof entityStats.value?.size === 'number'),
+  );
 
   const iconStyle = computed(() => !entityStats.value?.thumbnail
     ? { backgroundColor: 'var(--color-bg-control-secondary-default)' }
@@ -89,10 +109,15 @@
     return entityStats.value!.tags;
   });
 
-  async function loadEntityStats(fullPath: string) {
+  const isLoading = ref(false);
+
+  async function loadEntity(fullPath: string) {
     try {
       isLoading.value = true;
       entityStats.value = await getEntityStats({ fsId: props.fsId, fullPath }) || null;
+      if (canHash.value) {
+        await loadHashing();
+      }
     } finally {
       isLoading.value = false;
     }
@@ -102,7 +127,9 @@
     () => props.path,
     async (val, oVal) => {
       if (val && val !== oVal) {
-        await loadEntityStats(val);
+
+        stopHashingProcess();
+        await loadEntity(val);
 
         const { type, thumbnail, ext } = entityStats.value!;
         if (
@@ -122,6 +149,10 @@
     },
     { immediate: true },
   );
+
+  onBeforeUnmount(() => {
+    stopHashingProcess();
+  });
 </script>
 
 <template>
@@ -209,6 +240,56 @@
       </div>
     </div>
 
+    <template v-if="canHash">
+      <div
+        v-if="(!sha256hex || !sha512hex) && !(calculating256 || calculating512)"
+        :class="$style.actions"
+      >
+        <ui3n-button
+          type="secondary"
+          @click.stop.prevent="calculateHash"
+        >
+          {{ $tr('fs.entity.info.calculate.hash') }}
+        </ui3n-button>
+      </div>
+
+      <div
+        v-if="sha256hex || calculating256"
+        :class="$style.row"
+      >
+        <span>SHA-256</span>
+
+        <div v-if="sha256hex">
+          {{ sha256hex }}
+        </div>
+
+        <div
+          v-if="calculating256"
+          :class="$style.progress"
+        >
+          {{ sha256progress }}%
+        </div>
+      </div>
+
+      <div
+        v-if="sha512hex || calculating512"
+        :class="$style.row"
+      >
+        <span>SHA-512</span>
+
+        <div v-if="sha512hex">
+          {{ sha512hex }}
+        </div>
+
+        <div
+          v-if="calculating512"
+          :class="$style.progress"
+        >
+          {{ sha512progress }}%
+        </div>
+      </div>
+    </template>
+
     <div
       v-if="isLoading"
       :class="$style.loader"
@@ -252,6 +333,12 @@
       transform-origin: center;
       transform: rotate(90deg);
     }
+  }
+
+  .actions {
+    display: flex;
+    justify-content: center;
+    align-items: center;
   }
 
   .iconBlock {
@@ -312,6 +399,13 @@
       align-items: center;
       font-weight: 400;
       color: var(--color-text-table-primary-default);
+      white-space: break-spaces;
+      word-break: break-word;
+
+      &.progress {
+        font-weight: 600;
+        color: var(--color-text-control-accent-default);
+      }
     }
   }
 

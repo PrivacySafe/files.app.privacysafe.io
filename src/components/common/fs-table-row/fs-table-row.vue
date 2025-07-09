@@ -43,8 +43,23 @@
   const { canRename, canSetUnsetFavorite, canCopyMove } = useAbilities();
 
   function onDblClick() {
-    if (props.row.type === 'folder') {
-      emits('action', { event: 'go', payload: props.row.fullPath });
+    switch (props.row.type) {
+      case 'folder': {
+        emits('action', { event: 'go', payload: props.row.fullPath });
+        return;
+      }
+      case 'file': {
+        emits('action', { event: 'open:file', payload: props.row.fullPath });
+        return;
+      }
+      case 'link': {
+        if (props.row.isFile) {
+          emits('action', { event: 'open:linked-file', payload: props.row.fullPath });
+        } else if (props.row.isFolder) {
+          emits('action', { event: 'go:linked-folder', payload: props.row.fullPath });
+        }
+        return;
+      }
     }
   }
 

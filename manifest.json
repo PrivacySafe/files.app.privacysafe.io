@@ -3,7 +3,7 @@
   "appDomain": "files.app.privacysafe.io",
   "icon": "logo.png",
   "description": "Feature-rich file manager for secure storage of your digital assets.",
-  "version": "0.6.2",
+  "version": "0.7.1",
 
   "components": {
     "/index.html": {

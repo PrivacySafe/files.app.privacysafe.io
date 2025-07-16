@@ -47,7 +47,7 @@
     sha512progress,
     calculateHash,
     loadHashing,
-    stopHashingProcess,
+    stopHashingProcess
   } = useFileHashing(fsIdValue, pathValue, entityStats);
 
   const canHash = computed(() => entityStats.value?.isFile

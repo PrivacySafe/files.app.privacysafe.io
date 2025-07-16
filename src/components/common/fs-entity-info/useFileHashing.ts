@@ -29,103 +29,14 @@ const bufferLen = 512 * 1024;
 interface CachedFileContentHashes {
   contentMTime: number;
   contentLen: number;
-  hashes: { [alg: string]: string };
+  hashes: { [alg: string]: string; };
 }
 
 type ReadonlyFile = web3n.files.ReadonlyFile;
 type WritableFile = web3n.files.WritableFile;
-type FileByteSource = web3n.files.FileByteSource;
-
-async function readCachedHashes(file: ReadonlyFile): Promise<CachedFileContentHashes | undefined> {
-  try {
-    const hashes = (await file.getXAttr(HASHES_XATTR_NAME)) as CachedFileContentHashes | undefined;
-    if (!hashes || typeof hashes !== 'object') {
-      return;
-    }
-    const { mtime, size } = await file.stat();
-    if (hashes.contentMTime === mtime?.valueOf() && hashes.contentLen === size) {
-      return hashes;
-    }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  } catch (err) {
-    /* empty */
-  }
-}
-
-async function cacheHashInXAttrOf(
-  file: WritableFile,
-  contentMTime: number,
-  contentLen: number,
-  alg: string,
-  hashInHex: string,
-): Promise<void> {
-  try {
-    const { mtime, size } = await file.stat();
-    if (contentMTime !== mtime?.valueOf() || contentLen !== size) {
-      throw new Error(`Given content mtime and size don't correspond to current file's values.`);
-    }
-    let hashes = await readCachedHashes(file);
-    if (hashes && hashes.contentMTime === mtime.valueOf() && hashes.contentLen === size) {
-      hashes.hashes[alg] = hashInHex;
-    } else {
-      hashes = { contentMTime, contentLen, hashes: { [alg]: hashInHex } };
-    }
-    await file.updateXAttrs({ set: { [HASHES_XATTR_NAME]: hashes } });
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  } catch (err) {
-    /* empty */
-  }
-}
-
-async function readAndHashProcess(
-  content: FileByteSource,
-  hasher: { update: (chunk: Uint8Array) => void },
-  reportProgress: (bytesDone: number) => void,
-  shouldStop: () => boolean,
-): Promise<void> {
-  const totalSize = await content.getSize();
-  let bytesRead = 0;
-  let bytesHashed = 0;
-  let chunk: Uint8Array | undefined = undefined;
-
-  function hashChunkAndReport() {
-    // note that on the first cycle there is no chunk, hence we check
-    if (chunk) {
-      hasher.update(chunk);
-      bytesHashed += chunk.length;
-      chunk = undefined;
-      reportProgress(bytesHashed);
-    }
-  }
-
-  while (bytesRead < totalSize) {
-    if (shouldStop()) {
-      console.info('Hashing canceled by stop signal');
-      break;
-    }
-
-    // start reading, but don't wait here
-    const reading = content.readNext(bufferLen);
-
-    // this process hashes, while core gets new chunk
-    hashChunkAndReport();
-
-    chunk = await reading;
-    if (chunk) {
-      bytesRead += chunk.length;
-    } else {
-      throw new Error(`Unexpect end of file`);
-    }
-  }
-
-  // hash the last chunk
-  hashChunkAndReport();
-}
 
 export function useFileHashing(
-  fsId: ComputedRef<string>,
-  path: ComputedRef<string>,
-  fileStats: Ref<Nullable<ListingEntryExtended>>,
+  fsId: ComputedRef<string>, path: ComputedRef<string>, fileStats: Ref<Nullable<ListingEntryExtended>>
 ) {
   const { getFs } = useFsEntryStore();
 
@@ -166,12 +77,11 @@ export function useFileHashing(
       const content = await file.value!.getByteSource();
 
       await readAndHashProcess(
-        content,
-        sha256,
+        content, sha256,
         bytesDone => {
           sha256progress.value = Math.floor((bytesDone / fileSize.value) * 100);
         },
-        () => isHashingProcStopped.value,
+        () => isHashingProcStopped.value
       );
 
       const hashInHex = sha256.digest('hex');
@@ -191,12 +101,11 @@ export function useFileHashing(
       const content = await file.value!.getByteSource();
 
       await readAndHashProcess(
-        content,
-        sha512,
+        content, sha512,
         bytesDone => {
           sha512progress.value = Math.floor((bytesDone / fileSize.value) * 100);
         },
-        () => isHashingProcStopped.value,
+        () => isHashingProcStopped.value
       );
 
       const hashInHex = sha512.digest('hex');
@@ -230,10 +139,7 @@ export function useFileHashing(
       if (cached.hashes[SHA512_ALG]) {
         sha512hex.value = cached.hashes[SHA512_ALG];
       }
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (err) {
-      /* empty */
-    }
+    } catch (err) {}
   }
 
   async function loadHashing() {
@@ -250,6 +156,82 @@ export function useFileHashing(
     sha512progress,
     calculateHash,
     loadHashing,
-    stopHashingProcess,
+    stopHashingProcess
   };
+}
+
+async function readCachedHashes(file: ReadonlyFile): Promise<CachedFileContentHashes|undefined> {
+  try {
+    const hashes = await file.getXAttr(HASHES_XATTR_NAME) as CachedFileContentHashes|undefined;
+    if (!hashes || (typeof hashes !== 'object')) {
+      return;
+    }
+    const { mtime, size } = await file.stat();
+    if ((hashes.contentMTime === mtime?.valueOf()) && (hashes.contentLen === size)) {
+      return hashes;
+    }
+  } catch (err) {}
+}
+
+async function cacheHashInXAttrOf(
+  file: WritableFile, contentMTime: number, contentLen: number, alg: string, hashInHex: string
+): Promise<void> {
+  try {
+    const { mtime, size } = await file.stat();
+    if ((contentMTime !== mtime?.valueOf()) || (contentLen !== size)) {
+      throw new Error(`Given content mtime and size don't correspond to current file's values.`);
+    }
+    let hashes = await readCachedHashes(file);
+    if (hashes && ((hashes.contentMTime === mtime.valueOf()) && (hashes.contentLen === size))) {
+      hashes.hashes[alg] = hashInHex;
+    } else {
+      hashes = { contentMTime, contentLen, hashes: { [alg]: hashInHex } };
+    }
+    await file.updateXAttrs({ set: { [HASHES_XATTR_NAME]: hashes } });
+  } catch (err) {}
+}
+
+type FileByteSource = web3n.files.FileByteSource;
+
+async function readAndHashProcess(
+  content: FileByteSource, hasher: { update: (chunk: Uint8Array) => void; },
+  reportProgress: (bytesDone: number) => void, shouldStop: () => boolean
+): Promise<void> {
+  const totalSize = await content.getSize();
+  let bytesRead = 0;
+  let bytesHashed = 0;
+  let chunk: Uint8Array | undefined = undefined;
+
+  function hashChunkAndReport() {
+    // note that on the first cycle there is no chunk, hence we check
+    if (chunk) {
+      hasher.update(chunk);
+      bytesHashed += chunk.length;
+      chunk = undefined;
+      reportProgress(bytesHashed);
+    }
+  }
+
+  while (bytesRead < totalSize) {
+    if (shouldStop()) {
+      console.info('Hashing canceled by stop signal');
+      break;
+    }
+
+    // start reading, but don't wait here
+    const reading = content.readNext(bufferLen);
+
+    // this process hashes, while core gets new chunk
+    hashChunkAndReport();
+
+    chunk = await reading;
+    if (chunk) {
+      bytesRead += chunk.length;
+    } else {
+      throw new Error(`Unexpect end of file`);
+    }
+  }
+
+  // hash the last chunk
+  hashChunkAndReport();
 }

@@ -32,6 +32,10 @@
     onResize,
     appExit,
   } = useAppView();
+
+  async function openDashboard() {
+    await w3n.shell!.openDashboard!();
+  }
 </script>
 
 <template>
@@ -46,6 +50,7 @@
           :src="prLogo"
           alt="logo"
           :class="$style.toolbarLogo"
+          @click="openDashboard"
         >
         <div :class="$style.delimiter">
           /

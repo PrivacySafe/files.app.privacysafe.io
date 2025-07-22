@@ -19,7 +19,7 @@ import {
   isFileImage,
   isFileVideo,
   resizeImage,
-  uint8ToBase64,
+  uint8ToDataURL,
   createVideoThumbnail,
 } from '@v1nt1248/3nclient-lib/utils';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
@@ -57,7 +57,7 @@ export async function createFileBaseOnOsFileSystemFile({
     let img: Nullable<string> = null;
 
     if (isImage) {
-      const base64Image = byteArray ? uint8ToBase64(byteArray, type) : '';
+      const base64Image = byteArray ? uint8ToDataURL(byteArray, type) : '';
       img = base64Image ? await resizeImage(base64Image, 200) : '';
     } else if (isVideo) {
       img = await createVideoThumbnail(uploadedFile, 200, 5);

@@ -14,7 +14,7 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import { getFileExtension, mimeTypes, resizeImage, uint8ToBase64 } from '@v1nt1248/3nclient-lib/utils';
+import { getFileExtension, mimeTypes, resizeImage, uint8ToDataURL } from '@v1nt1248/3nclient-lib/utils';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
 
 export async function createImageThumbnail(fs: web3n.files.FS, path: string): Promise<Nullable<string>> {
@@ -25,7 +25,7 @@ export async function createImageThumbnail(fs: web3n.files.FS, path: string): Pr
       throw new Error(`Error while ${path} file read`);
     }
 
-    const base64Image = uint8ToBase64(byteArray, fileMimeType);
+    const base64Image = uint8ToDataURL(byteArray, fileMimeType);
     if (!base64Image) return null;
 
     return resizeImage(base64Image, 200);

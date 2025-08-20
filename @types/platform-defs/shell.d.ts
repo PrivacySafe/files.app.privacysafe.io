@@ -26,6 +26,7 @@ declare namespace web3n.shell {
 		watchStartCmds?: commands.WatchStartCmds;
 		getFSResource?: GetFSResource;
 		openDashboard?: OpenDashboard;
+		volumeMounts?: mounts.VolumeMounts;
 	}
 
 	type GetFSResource = (

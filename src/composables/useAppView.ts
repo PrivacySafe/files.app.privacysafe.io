@@ -18,11 +18,11 @@ import { computed, onBeforeMount, onBeforeUnmount, onMounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useAppStore } from '@/store';
 import type { Ui3nResizeCbArg } from '@v1nt1248/3nclient-lib';
-import { UISettings } from '@/utils/ui-settings';
+import { SystemSettings } from '@/utils/ui-settings';
 
 export function useAppView() {
   const appStore = useAppStore();
-  const { appVersion, user: me, connectivityStatus, commonLoading } = storeToRefs(appStore);
+  const { appVersion, user: me, connectivityStatus, commonLoading, customLogoSrc } = storeToRefs(appStore);
   const {
     getAppConfig,
     getAppVersion,
@@ -32,6 +32,7 @@ export function useAppView() {
     setColorTheme,
     setSystemFoldersDisplaying,
     setAppWindowSize,
+    setCustomLogo
   } = appStore;
 
   const appElement = ref<HTMLDivElement | null>(null);
@@ -70,13 +71,14 @@ export function useAppView() {
 
       connectivityTimerId.value = setInterval(getConnectivityStatus, 60000);
 
-      const config = await UISettings.makeResourceReader();
+      const config = await SystemSettings.makeResourceReader();
       config.watchConfig({
         next: appConfig => {
-          const { lang, colorTheme, systemFoldersDisplaying } = appConfig;
+          const { lang, colorTheme, systemFoldersDisplaying, customLogo } = appConfig;
           setLang(lang);
           setColorTheme(colorTheme);
           setSystemFoldersDisplaying(!!systemFoldersDisplaying);
+          setCustomLogo(customLogo);
         },
       });
     } catch (e) {
@@ -103,6 +105,7 @@ export function useAppView() {
     appElement,
     appVersion,
     me,
+    customLogoSrc,
     connectivityStatusText,
     commonLoading,
     onResize,

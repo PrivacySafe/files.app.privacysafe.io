@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2024-2025 3NSoft Inc.
+ Copyright (C) 2024 - 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -16,9 +16,10 @@
 */
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
-import { UISettings } from '@/utils/ui-settings';
+import { SystemSettings } from '@/utils/ui-settings';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
-import type { AvailableLanguage, AvailableColorTheme, ConnectivityStatus, AppConfigs } from '@/types';
+import type { AvailableLanguage, AvailableColorTheme, ConnectivityStatus, AppConfigs, AppConfig } from '@/types';
+import { blobFromDataURL } from '@/utils/image-files';
 
 export const useAppStore = defineStore('app', () => {
   const appVersion = ref<string>('');
@@ -26,6 +27,7 @@ export const useAppStore = defineStore('app', () => {
   const user = ref<Nullable<string>>(null);
   const lang = ref<AvailableLanguage>('en');
   const colorTheme = ref<AvailableColorTheme>('default');
+  const customLogoSrc = ref<string>();
   const appWindowSize = ref<{ width: number; height: number }>({
     width: 0,
     height: 0,
@@ -87,15 +89,27 @@ export const useAppStore = defineStore('app', () => {
     areSystemFoldersShowing.value = value;
   }
 
+  async function setCustomLogo(dataURL: AppConfig['customLogo']): Promise<void> {
+    if (dataURL) {
+      try {
+        const imgBlob = blobFromDataURL(dataURL);
+        customLogoSrc.value = URL.createObjectURL(imgBlob);
+      } catch (err) {
+        console.error(`Parsing dataURL with customLogo throws error:`, err);
+      }
+    } else {
+      customLogoSrc.value = undefined;
+    }
+  }
+
   async function getAppConfig(): Promise<AppConfigs | undefined> {
     try {
-      const config = await UISettings.makeResourceReader();
-      const langVal = await config.getCurrentLanguage();
-      const colorTheme = await config.getCurrentColorTheme();
-      const systemFoldersDisplaying = await config.getSystemFoldersDisplaying();
-      setLang(langVal);
+      const config = await SystemSettings.makeResourceReader();
+      const { lang, colorTheme, systemFoldersDisplaying, customLogo } = await config.getAll();
+      setLang(lang);
       setColorTheme(colorTheme);
       setSystemFoldersDisplaying(systemFoldersDisplaying);
+      setCustomLogo(customLogo);
 
       return config;
     } catch (e) {
@@ -110,6 +124,7 @@ export const useAppStore = defineStore('app', () => {
     user,
     lang,
     colorTheme,
+    customLogoSrc,
     appWindowSize,
     areSystemFoldersShowing,
     commonLoading,
@@ -122,6 +137,7 @@ export const useAppStore = defineStore('app', () => {
     setLang,
     setColorTheme,
     setSystemFoldersDisplaying,
+    setCustomLogo,
     getAppConfig,
   };
 });

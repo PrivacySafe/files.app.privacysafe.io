@@ -16,6 +16,7 @@ export type AppConfig = {
   lang: AvailableLanguage;
   colorTheme: AvailableColorTheme;
   systemFoldersDisplaying?: boolean;
+  customLogo?: string;
 };
 
 export interface AppConfigsInternal {

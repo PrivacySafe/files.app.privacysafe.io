@@ -28,6 +28,7 @@
     appVersion,
     me,
     connectivityStatusText,
+    customLogoSrc,
     commonLoading,
     onResize,
     appExit,
@@ -47,7 +48,7 @@
     <div :class="$style.toolbar">
       <div :class="$style.toolbarTitle">
         <img
-          :src="prLogo"
+          :src="customLogoSrc ? customLogoSrc : prLogo"
           alt="logo"
           :class="$style.toolbarLogo"
           @click="openDashboard"
@@ -158,6 +159,8 @@
   .toolbarLogo {
     position: relative;
     top: -2px;
+    cursor: pointer;
+    height: var(--spacing-l);
   }
 
   .delimiter {

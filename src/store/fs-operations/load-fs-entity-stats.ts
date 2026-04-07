@@ -26,6 +26,15 @@ export async function loadFsEntityStats(
   const tags = isThisFsDevice ? [] : ((await fs!.getXAttr(fullPath, 'tags')) as string[] | undefined);
   const favoriteId = isThisFsDevice ? undefined : ((await fs!.getXAttr(fullPath, 'favoriteId')) as string | undefined);
   const thumbnail = isThisFsDevice ? undefined : ((await fs!.getXAttr(fullPath, 'thumbnail')) as string | undefined);
+  const kayrosAttrsNames = await fs!.listXAttrs(fullPath)
+    .catch(() => []) as string[];
+  const kayrosAttrKeys = kayrosAttrsNames.filter(name => name.startsWith('kayros_'));
+  const kayrosAttrsEntries = await Promise.all(kayrosAttrKeys.map(async key => (
+    [key, await fs!.getXAttr(fullPath, key).catch(() => undefined)] as const
+  )));
+  const kayrosAttrs = Object.fromEntries(
+    kayrosAttrsEntries.filter(([, value]) => value !== undefined),
+  );
 
   return {
     id,
@@ -36,6 +45,7 @@ export async function loadFsEntityStats(
     ...(favoriteId && { favoriteId }),
     ...(stats.isFile && { ext: getFileExtension(name) }),
     ...(thumbnail && { thumbnail }),
+    ...(Object.keys(kayrosAttrs).length > 0 && { kayrosAttrs }),
     ...stats,
   };
 }

@@ -11,6 +11,12 @@
       "runtime": "web-gui",
       "formFactor": [ "desktop", "tablet" ],
       "capsRequested": {
+        "otherAppsRPC": [
+          {
+            "app": "kayros.app.provable.dev",
+            "service": "KayrosNotary"
+          }
+        ],
         "apps": "opener",
         "logout": "all",
         "log": "all",

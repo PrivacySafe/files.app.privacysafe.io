@@ -76,6 +76,7 @@ export interface ListingEntryExtended extends web3n.files.Stats {
   parentFolder?: string;
   ext?: string;
   thumbnail?: string;
+  kayrosAttrs?: Record<string, unknown>;
   displayingCTime?: string;
 }
 

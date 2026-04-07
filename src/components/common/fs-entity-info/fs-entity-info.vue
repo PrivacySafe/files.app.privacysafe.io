@@ -111,6 +111,13 @@
   });
 
   const isLoading = ref(false);
+  const kayrosAttrs = computed<Record<string, unknown>>(() => entityStats.value?.kayrosAttrs || {});
+  const kayrosAttrEntries = computed(() => Object.entries(kayrosAttrs.value)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => ({
+      key,
+      value: typeof value === 'string' ? value : JSON.stringify(value),
+    })));
 
   async function loadEntity(fullPath: string) {
     try {
@@ -311,6 +318,27 @@
           {{ sha512progress }}%
         </div>
       </div>
+
+      <div
+        v-if="kayrosAttrEntries.length"
+        :class="$style.row"
+      >
+        <span>{{ $tr('fs.entity.info.kayros.status') }}</span>
+
+        <section :class="$style.kayrosState">
+          <p>
+            <i>{{ $tr('fs.entity.info.kayros.uploaded') }}</i>
+          </p>
+          
+          <p
+            v-for="entry in kayrosAttrEntries"
+            :key="entry.key"
+            :class="$style.kayrosValue"
+          >
+            <b>{{ entry.key }}</b>: {{ entry.value }}
+          </p>
+        </section>
+      </div>
     </template>
 
 
@@ -450,5 +478,19 @@
     display: flex;
     justify-content: center;
     align-items: center;
+  }
+
+  .kayrosState {
+    display: block;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: break-spaces;
+  }
+
+  .kayrosValue {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: break-spaces;
   }
 </style>

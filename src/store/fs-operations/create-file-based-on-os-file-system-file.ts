@@ -24,6 +24,7 @@ import {
 } from '@v1nt1248/3nclient-lib/utils';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
 import { createPdfThumbnail, getFileArray } from '@/utils';
+import { notarizeUploadedFileWithKayros } from '@/utils/kayros-upload-notary';
 
 export async function createFileBaseOnOsFileSystemFile({
   fs,
@@ -40,32 +41,47 @@ export async function createFileBaseOnOsFileSystemFile({
     const { name = '', type } = uploadedFile;
     const fullFilePath = `${folderPath}/${name}`;
     const byteArray = await getFileArray(uploadedFile);
+    const fileId = getRandomId(16);
 
     if (!byteArray) {
       throw new Error('No file uploaded');
     }
 
     await fs.writeBytes(fullFilePath, byteArray);
-    await fs.updateXAttrs(fullFilePath, { set: { id: getRandomId(16) } });
+    await fs.updateXAttrs(fullFilePath, { set: { id: fileId } });
 
-    if (!withThumbnail) {
-      return;
+    if (withThumbnail) {
+      const isImage = isFileImage({ type });
+      const isVideo = isFileVideo({ type });
+      let img: Nullable<string> = null;
+
+      if (isImage) {
+        const base64Image = byteArray ? uint8ToDataURL(byteArray, type) : '';
+        img = base64Image ? await resizeImage(base64Image, 200) : '';
+      } else if (isVideo) {
+        img = await createVideoThumbnail(uploadedFile, 200, 5);
+      } else if (type === 'application/pdf') {
+        img = await createPdfThumbnail(byteArray, 200);
+      }
+
+      img && (await fs.updateXAttrs(fullFilePath, { set: { thumbnail: img } }));
     }
 
-    const isImage = isFileImage({ type });
-    const isVideo = isFileVideo({ type });
-    let img: Nullable<string> = null;
-
-    if (isImage) {
-      const base64Image = byteArray ? uint8ToDataURL(byteArray, type) : '';
-      img = base64Image ? await resizeImage(base64Image, 200) : '';
-    } else if (isVideo) {
-      img = await createVideoThumbnail(uploadedFile, 200, 5);
-    } else if (type === 'application/pdf') {
-      img = await createPdfThumbnail(byteArray, 200);
+    try {
+      const file = await fs.writableFile(fullFilePath, { create: false });
+      await notarizeUploadedFileWithKayros({
+        fs,
+        file,
+        fullFilePath,
+        uploadedFile,
+        fileId,
+        byteLength: byteArray.byteLength,
+      });
+    } catch (err) {
+      const registrationError = `Kayros registration failed for ${uploadedFile.name}.`;
+      console.error(registrationError, err);
+      await w3n.log?.('error', registrationError, err);
     }
-
-    img && (await fs.updateXAttrs(fullFilePath, { set: { thumbnail: img } }));
   } catch (e) {
     const errorMessage = `An error creating of the ${uploadedFile.name} file.`;
     console.error(errorMessage, e);

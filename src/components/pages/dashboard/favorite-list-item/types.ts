@@ -1,4 +1,4 @@
-import type { FavoriteFolder } from '@/types';
+import type { FavoriteFolder } from '@shared/types';
 
 export interface FavoriteListItemProps {
   item: FavoriteFolder & { folderName?: string };

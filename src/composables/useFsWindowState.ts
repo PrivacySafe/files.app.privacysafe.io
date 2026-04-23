@@ -2,7 +2,13 @@ import { computed, type ComputedRef } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useAppStore, useFsStore } from '@/store';
 import { useNavigation } from '@/composables/useNavigation';
-import { USER_FS, END_OF_TRASH_FOLDER_ID, START_OF_SYSTEM_FS_ID } from '@/constants';
+import {
+  USER_FS,
+  START_OF_SYSTEM_FS_ID,
+  USER_LOCAL_FS,
+  USER_TRASH_FOLDER,
+  USER_TRASH_LOCAL_FOLDER,
+} from '@shared/constants';
 
 export function useFsWindowState(fsWindowNumber: ComputedRef<'1' | '2'>) {
   const {
@@ -31,7 +37,7 @@ export function useFsWindowState(fsWindowNumber: ComputedRef<'1' | '2'>) {
   );
 
   const currentWindowRootFolderBasePath = computed(() =>
-    currentWindowRootFolderId.value?.includes(END_OF_TRASH_FOLDER_ID) ? trashFolderName.value : '',
+    [USER_TRASH_FOLDER, USER_TRASH_LOCAL_FOLDER].includes(currentWindowRootFolderId.value) ? trashFolderName.value : '',
   );
 
   const currentWindowFolderPath = computed(() =>
@@ -43,20 +49,28 @@ export function useFsWindowState(fsWindowNumber: ComputedRef<'1' | '2'>) {
     direction: fsWindowNumber.value === '1' ? window1SortOrder.value : window2SortOrder.value,
   }));
 
+  const isSyncFolderInCurrentWindow = computed(() => currentWindowRootFolderId.value.includes('synced'));
+
   const isTrashFolderInCurrentWindow = computed(() => {
     if ((isSplittedMode.value && fsWindowNumber.value === '1') || !isSplittedMode.value) {
-      return window1FsId.value === USER_FS && window1RootFolderId.value.includes(END_OF_TRASH_FOLDER_ID);
+      return (
+        (window1FsId.value === USER_FS && window1RootFolderId.value === USER_TRASH_FOLDER) ||
+        (window1FsId.value === USER_LOCAL_FS && window1RootFolderId.value === USER_TRASH_LOCAL_FOLDER)
+      );
     }
 
-    return window2FsId.value === USER_FS && window2RootFolderId.value!.includes(END_OF_TRASH_FOLDER_ID);
+    return (
+      (window2FsId.value === USER_FS && window2RootFolderId.value === USER_TRASH_FOLDER) ||
+      (window2FsId.value === USER_LOCAL_FS && window2RootFolderId.value === USER_TRASH_LOCAL_FOLDER)
+    );
   });
 
   const isSystemFolderInCurrentWindow = computed(() => {
     if ((isSplittedMode.value && fsWindowNumber.value === '1') || !isSplittedMode.value) {
-      return window1FsId.value.includes(START_OF_SYSTEM_FS_ID);
+      return !Array.isArray(window1FsId.value) && window1FsId.value?.includes(START_OF_SYSTEM_FS_ID);
     }
 
-    return window2FsId.value!.includes(START_OF_SYSTEM_FS_ID);
+    return !Array.isArray(window2FsId.value) && window2FsId.value?.includes(START_OF_SYSTEM_FS_ID);
   });
 
   return {
@@ -66,6 +80,7 @@ export function useFsWindowState(fsWindowNumber: ComputedRef<'1' | '2'>) {
     currentWindowRootFolderBasePath,
     currentWindowFolderPath,
     currentWindowSortConfig,
+    isSyncFolderInCurrentWindow,
     isTrashFolderInCurrentWindow,
     isSystemFolderInCurrentWindow,
   };

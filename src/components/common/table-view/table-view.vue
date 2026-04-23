@@ -23,28 +23,37 @@
     onBeforeMount,
     onBeforeUnmount,
     ref,
-    watch,
   } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { storeToRefs } from 'pinia';
-  import type { AppGlobalEvents, ListingEntryExtended } from '@/types';
-  import { I18N_KEY, I18nPlugin, DIALOGS_KEY, DialogsPlugin, VueBusPlugin, VUEBUS_KEY, NOTIFICATIONS_KEY, NotificationsPlugin } from '@v1nt1248/3nclient-lib/plugins';
+  import {
+    DIALOGS_KEY,
+    DialogsPlugin,
+    VueBusPlugin,
+    VUEBUS_KEY,
+    NOTIFICATIONS_KEY,
+    NotificationsPlugin,
+  } from '@v1nt1248/3nclient-lib/plugins';
   import type { Nullable, Ui3nTableExpose } from '@v1nt1248/3nclient-lib';
-  import { useAppStore, useFsEntryStore, useRunModeInfoStore } from '@/store';
+  import { useAppStore, useFsStore, useRunModeInfoStore } from '@/store';
   import { useNavigation } from '@/composables/useNavigation';
-  import { END_OF_TRASH_FOLDER_ID } from '@/constants';
+  import type { AppGlobalEvents, FsEntityInfoProvideProps, ListingEntryExtended } from '@shared/types';
+  import { USER_TRASH_FOLDER, USER_TRASH_LOCAL_FOLDER } from '@shared/constants';
+  import type { FsTableBulkActionName } from '@/components/common/fs-table-bulk-actions/types';
   import FsTable from '@/components/common/fs-table/fs-table.vue';
   import TableBulkActions from '@/components/common/fs-table-bulk-actions/fs-table-bulk-actions.vue';
-  import type { FsTableBulkActionName } from '@/components/common/fs-table-bulk-actions/types';
-  import FsEntityInfo from '@/components/common/fs-entity-info/fs-entity-info.vue';
 
   const props = defineProps<{
-    window: 1 | 2;
+    windowIndex: 1 | 2;
   }>();
 
+  const { t } = useI18n();
+
   const bus = inject<VueBusPlugin<AppGlobalEvents>>(VUEBUS_KEY)!;
-  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
   const dialogs = inject<DialogsPlugin>(DIALOGS_KEY)!;
   const notifications = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
+
+  const { openFsEntityInfoBlock } = inject<FsEntityInfoProvideProps>('fsEntityInfo')!;
 
   const {
     route,
@@ -63,18 +72,17 @@
   const { commonLoading, trashFolderName } = storeToRefs(appStore);
   const { setCommonLoading } = appStore;
 
-  const { downloadEntities, restoreEntities } = useFsEntryStore();
+  const { downloadEntities, restoreEntities } = useFsStore();
 
   const runModeInfoStore = useRunModeInfoStore();
   const { isDragging, isMoveMode, isMoveModeQuick } = storeToRefs(runModeInfoStore);
   const { toggleCopyMoveMode, deleteSelectedEntities } = runModeInfoStore;
 
   const tableComponent = ref<Nullable<Ui3nTableExpose<ListingEntryExtended>>>(null);
-  const displayedFsEntity = ref<string>('');
 
   const tableFsId = computed(() => {
     if (isSplittedMode.value) {
-      return props.window === 1 ? window1FsId.value : window2FsId.value;
+      return props.windowIndex === 1 ? window1FsId.value : window2FsId.value;
     }
 
     return window1FsId.value;
@@ -82,22 +90,22 @@
 
   const tableRootFolderId = computed(() => {
     if (isSplittedMode.value) {
-      return props.window === 1 ? window1RootFolderId.value : window2RootFolderId.value;
+      return props.windowIndex === 1 ? window1RootFolderId.value : window2RootFolderId.value!;
     }
 
     return window1RootFolderId.value;
-  }) as ComputedRef<string>;
+  });
 
   const currentProcessedPath = computed(() => {
     if (isSplittedMode.value) {
-      return props.window === 1 ? route.query.path || '' : route.query.path2 || '';
+      return props.windowIndex === 1 ? route.query.path || '' : route.query.path2 || '';
     }
 
     return route.query.path || '';
   }) as ComputedRef<string>;
 
   function closeFsInfoBlock() {
-    displayedFsEntity.value = '';
+    openFsEntityInfoBlock(null);
   }
 
   async function go(fullPath: string) {
@@ -105,72 +113,69 @@
     if (isSplittedMode.value) {
       return navigateToRouteDouble({
         query: {
-          ...(props.window === 1 && { path: fullPath }),
-          ...(props.window === 2 && { path2: fullPath }),
+          ...(props.windowIndex === 1 && { path: fullPath }),
+          ...(props.windowIndex === 2 && { path2: fullPath }),
         },
       });
     }
 
     return navigateToRouteSingle({
-      params: { fsId: tableFsId.value },
+      params: { rootFolderId: tableRootFolderId.value },
       query: { path: fullPath },
     });
   }
 
-  function fsEntityInfoOpen(path: string) {
-    if (!isSplittedMode.value) {
-      displayedFsEntity.value = path;
-    }
-  }
-
   async function handleBulkActions(
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    { action, payload }: { action: FsTableBulkActionName, payload?: unknown },
+    { action, payload }: { action: FsTableBulkActionName; payload?: unknown },
     entities: ListingEntryExtended[],
   ) {
+    openFsEntityInfoBlock(null);
+
     switch (action) {
-      case 'delete':
+      case 'set:favorite':
+        break;
+      case 'copy/move':
+        break;
+      case 'delete': {
         await deleteSelectedEntities({ fsId: tableFsId.value, entities, completely: false });
         break;
+      }
 
       case 'delete:completely': {
         const component = defineAsyncComponent(() => import('@/components/dialogs/confirmation-dialog.vue'));
-        dialogs.$openDialog<typeof component>({
-          component,
-          componentProps: {
-            dialogText: $tr('fs.entity.delete.permanently.warning1'),
-            additionalDialogText: $tr('fs.entity.delete.permanently.warning2'),
-          },
+        const res = await dialogs.$openDialog(component, {
+          dialogText: t('fs.permanently_delete.warning1'),
+          additionalDialogText: t('fs.permanently_delete.warning2'),
           dialogProps: {
-            title: $tr('fs.entity.delete.permanently.title'),
-            confirmButtonText: $tr('fs.entity.delete.permanently.confirm,button'),
+            title: t('fs.permanently_delete.title'),
+            confirmButtonText: t('fs.permanently_delete.button.confirm'),
             confirmButtonBackground: 'var(--error-content-default)',
             confirmButtonColor: 'var(--error-fill-default)',
-            onConfirm: async () => {
-              try {
-                await deleteSelectedEntities({ fsId: tableFsId.value, entities, completely: true });
-
-                notifications.$createNotice({
-                  type: 'info',
-                  withIcon: true,
-                  content: entities.length > 1
-                    ? $tr('fs.entity.delete.plural.message.success', { count: `${entities.length}` })
-                    : $tr('fs.entity.delete.single.message.success'),
-                });
-              } catch (err) {
-                w3n.log('error', err as string);
-
-                notifications.$createNotice({
-                  type: 'error',
-                  withIcon: true,
-                  content: entities.length > 1
-                    ? $tr('fs.entity.delete.plural.message.error', { count: `${entities.length}` })
-                    : $tr('fs.entity.delete.single.message.error'),
-                });
-              }
-            },
           },
         });
+
+        const { event } = res;
+        if (event === 'confirm') {
+          try {
+            await deleteSelectedEntities({ fsId: tableFsId.value, entities, completely: true });
+
+            notifications.$createNotice({
+              type: 'info',
+              withIcon: true,
+              content: t('fs.entity.message.success.delete', { count: `${entities.length}` }),
+            });
+          } catch (err) {
+            w3n.log('error', err as string);
+
+            notifications.$createNotice({
+              type: 'error',
+              withIcon: true,
+              content: t('fs.entity.message.error.delete', { count: `${entities.length}` }),
+            });
+          }
+        }
+
         break;
       }
 
@@ -179,13 +184,12 @@
         try {
           res = await restoreEntities({ fsId: tableFsId.value, entities });
           if (res && res > 0) {
-            bus.$emitter.emit('refresh:data', void 0);
+            bus.$emitter.emit('refresh:data', { path: '', withoutVerify: true });
+
             notifications.$createNotice({
               type: 'success',
               withIcon: true,
-              content: res > 1
-                ? $tr('fs.entity.restore.plural.message.success', { count: `${res}` })
-                : $tr('fs.entity.restore.single.message.success'),
+              content: t('fs.entity.message.success.restore', { count: `${res}` }),
             });
           }
         } catch (err) {
@@ -193,9 +197,7 @@
           notifications.$createNotice({
             type: 'error',
             withIcon: true,
-            content: res && res > 1
-              ? $tr('fs.entity.restore.plural.message.error', { count: `${res}` })
-              : $tr('fs.entity.restore.single.message.error'),
+            content: t('fs.entity.message.error.restore', { count: `${res}` }),
           });
         }
         break;
@@ -204,6 +206,27 @@
       case 'download':
         await downloadEntities({ fsId: tableFsId.value, entities });
         break;
+
+      case 'resolve': {
+        const component = defineAsyncComponent(
+          () => import('@/components/dialogs/resolve-conflicts-dialog/resolve-conflicts-dialog.vue'),
+        );
+
+        await dialogs.$openDialog<boolean>(component, {
+          paths: entities.map(e => e.fullPath),
+          dialogProps: {
+            title: '',
+            width: 960,
+            cssStyle: { borderRadius: '24px' },
+            contentCssStyle: { borderRadius: '24px' },
+            confirmButton: false,
+            cancelButton: false,
+            closeOnClickOverlay: false,
+          },
+        });
+        bus.$emitter.emit('refresh:data', { path: currentProcessedPath.value });
+        break;
+      }
     }
   }
 
@@ -214,44 +237,47 @@
   onBeforeUnmount(() => {
     bus.$emitter.off('click:breadcrumb', closeFsInfoBlock);
   });
-
-  watch(
-    isSplittedMode,
-    (val, oVal) => {
-      if (val && val !== oVal) {
-        displayedFsEntity.value = '';
-      }
-    }, {
-      immediate: true,
-    },
-  );
 </script>
 
 <template>
-  <div :class="$style.tableView">
-    <div :class="[$style.content, displayedFsEntity && !isSplittedMode && $style.narrow]">
+  <div
+    v-if="tableFsId"
+    :class="$style.tableView"
+  >
+    <div :class="$style.content">
       <fs-table
         :fs-id="tableFsId"
         :root-folder-id="tableRootFolderId"
-        :window="window"
-        :base-path="{ fullPath: tableRootFolderId.includes(END_OF_TRASH_FOLDER_ID) ? trashFolderName : '', title: '' }"
+        :window-index="windowIndex"
+        :base-path="{
+          fullPath: [USER_TRASH_FOLDER, USER_TRASH_LOCAL_FOLDER].includes(tableRootFolderId)
+            ? trashFolderName
+            : '',
+          title: '',
+        }"
         :path="currentProcessedPath"
         :is-in-split-mode="isSplittedMode"
         :is-in-dragging-mode="isDragging"
-        :is-active="activeWindow === `${window}`"
+        :is-active="activeWindow === `${windowIndex}`"
         :is-loading="commonLoading"
         @init="tableComponent = $event"
         @loading="setCommonLoading($event)"
-        @make:active="selectActiveWindow(window)"
+        @make:active="selectActiveWindow(windowIndex)"
         @go="go"
-        @open:info="fsEntityInfoOpen"
+        @open:info="
+          path =>
+            path === null
+              ? openFsEntityInfoBlock(null)
+              : openFsEntityInfoBlock({ fsId: tableFsId, path, window: `${windowIndex}` })
+        "
       >
         <template #group-actions="{ selectedRows }">
           <table-bulk-actions
             :fs-id="tableFsId"
             :root-folder-id="tableRootFolderId"
             :folder-path="currentProcessedPath"
-            :window="window"
+            :window-index="windowIndex"
+            :is-in-split-mode="isSplittedMode"
             :selected-entities="selectedRows"
             :is-move-mode="isMoveMode"
             :is-move-mode-quick="isMoveModeQuick"
@@ -262,29 +288,12 @@
         </template>
       </fs-table>
     </div>
-
-    <transition
-      name="fade"
-      mode="in-out"
-    >
-      <div
-        v-if="displayedFsEntity && !isSplittedMode"
-        :class="$style.info"
-      >
-        <fs-entity-info
-          :fs-id="tableFsId"
-          :path="displayedFsEntity"
-          @close="displayedFsEntity = ''"
-        />
-      </div>
-    </transition>
   </div>
 </template>
 
 <style lang="scss" module>
   .tableView {
     --header-height: 64px;
-    --sidebar-width: 285px;
 
     display: flex;
     position: relative;
@@ -298,15 +307,5 @@
     position: relative;
     width: 100%;
     height: 100%;
-
-    &.narrow {
-      width: calc(100% - var(--sidebar-width) - 1px);
-    }
-  }
-
-  .info {
-    position: relative;
-    width: var(--sidebar-width);
-    border-left: 1px solid var(--color-border-block-primary-default);
   }
 </style>

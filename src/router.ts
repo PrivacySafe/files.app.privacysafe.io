@@ -15,30 +15,25 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import { createRouter, createWebHashHistory, RouteRecordRaw } from 'vue-router';
-import { APP_ROUTES } from '@/constants';
-import { useFsStore } from '@/store/fs.store';
+import { APP_ROUTES } from '@shared/constants';
 import Dashboard from '@/pages/dashboard/dashboard.vue';
 import FsFolder from '@/pages/fs-folder/fs-folder.vue';
 
 const routes: RouteRecordRaw[] = [
-  { path: '/', redirect: '/dashboard/single/user-synced/user-synced-root' },
-  { path: '/index.html', redirect: '/dashboard/single/user-synced/user-synced-root' },
+  { path: '/', redirect: '/dashboard/single/user-synced-root' },
+  { path: '/index.html', redirect: '/dashboard/single/user-synced-root' },
   {
     path: '/dashboard',
     name: APP_ROUTES.DASHBOARD,
     component: Dashboard,
-    beforeEnter: async () => {
-      const fsStore = useFsStore();
-      await fsStore.initializeFsItems();
-    },
     children: [
       {
-        path: 'single/:fsId/:folderId',
+        path: 'single/:rootFolderId',
         name: APP_ROUTES.SINGLE,
         component: FsFolder,
       },
       {
-        path: 'double/:fsId/:folderId/:fs2Id/:folder2Id',
+        path: 'double/:rootFolderId/:rootFolder2Id',
         name: APP_ROUTES.DOUBLE,
         components: {
           default: FsFolder,

@@ -15,60 +15,107 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import {
-  getRandomId,
+  createVideoThumbnail,
   isFileImage,
   isFileVideo,
   resizeImage,
   uint8ToDataURL,
-  createVideoThumbnail,
+  getRandomId,
 } from '@v1nt1248/3nclient-lib/utils';
+import { fileTypeFromBuffer } from 'file-type';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
+import { appStorageSrv } from '@/services/services-provider';
 import { createPdfThumbnail, getFileArray } from '@/utils';
+import { executeFunc } from '@shared/utils/execute-function';
+import { USER_FS, USER_LOCAL_FS } from '@shared/constants';
+import { getFileExtension } from '../../../src-deno/fs-service/utils';
+
+async function createThumbnailForFileFromOs(
+  uploadedFile: File & { path?: string },
+  byteArray: Uint8Array<ArrayBufferLike>,
+): Promise<{ img: Nullable<string>; ext: string; mime: string }> {
+  let fileType = await fileTypeFromBuffer(byteArray);
+  if (!fileType && uploadedFile) {
+    const parsedFileName = uploadedFile.name.split('.');
+
+    fileType = {
+      mime: uploadedFile.type,
+      ext: (parsedFileName.length > 1 ? parsedFileName.pop() : '') as string,
+    };
+  }
+
+  let img: Nullable<string> = null;
+  const isImage = isFileImage({ type: fileType!.mime });
+  const isVideo = isFileVideo({ type: fileType!.mime });
+
+  if (isImage) {
+    const base64Image = byteArray ? uint8ToDataURL(byteArray, fileType!.mime) : '';
+    img = base64Image ? await resizeImage(base64Image, 200) : '';
+  } else if (isVideo) {
+    img = await createVideoThumbnail(uploadedFile, 200, 5);
+  } else if (fileType!.mime === 'application/pdf') {
+    img = await createPdfThumbnail(byteArray!, 200);
+  }
+
+  return { img, ext: fileType!.ext, mime: fileType!.mime };
+}
 
 export async function createFileBaseOnOsFileSystemFile({
+  fsId,
   fs,
   uploadedFile,
   folderPath,
   withThumbnail,
 }: {
+  fsId: string;
   fs: web3n.files.WritableFS;
   uploadedFile: File & { path?: string };
   folderPath: string;
   withThumbnail?: boolean;
 }): Promise<void> {
-  try {
-    const { name = '', type } = uploadedFile;
-    const fullFilePath = `${folderPath}/${name}`;
-    const byteArray = await getFileArray(uploadedFile);
+  const { name } = uploadedFile;
 
+  try {
+    const byteArray = await getFileArray(uploadedFile);
     if (!byteArray) {
       throw new Error('No file uploaded');
     }
 
-    await fs.writeBytes(fullFilePath, byteArray);
-    await fs.updateXAttrs(fullFilePath, { set: { id: getRandomId(16) } });
+    const fullFilePath = `${folderPath}/${name}`;
+    const fileExt = getFileExtension(name);
+    const fileName = name.replace(`.${fileExt}`, '');
+    const isThereFileWithSameName = await fs.checkFilePresence(fullFilePath);
+    const newFullFileName = isThereFileWithSameName ? `${folderPath}/${fileName}_copy.${fileExt}` : fullFilePath;
 
-    if (!withThumbnail) {
-      return;
+    await executeFunc({
+      fn: fs.writeBytes,
+      fnArgs: [newFullFileName, byteArray],
+    });
+
+    const { img, ext, mime } = await createThumbnailForFileFromOs(uploadedFile, byteArray);
+
+    if (fsId === USER_FS || USER_LOCAL_FS) {
+      await executeFunc({
+        fn: fs.updateXAttrs,
+        fnArgs: [
+          newFullFileName,
+          {
+            set: {
+              id: getRandomId(24),
+              ext,
+              mime,
+              ...(withThumbnail && img && { thumbnail: img }),
+            },
+          },
+        ],
+      });
+
+      fsId === USER_FS && (await appStorageSrv.startSyncUpload(newFullFileName));
     }
-
-    const isImage = isFileImage({ type });
-    const isVideo = isFileVideo({ type });
-    let img: Nullable<string> = null;
-
-    if (isImage) {
-      const base64Image = byteArray ? uint8ToDataURL(byteArray, type) : '';
-      img = base64Image ? await resizeImage(base64Image, 200) : '';
-    } else if (isVideo) {
-      img = await createVideoThumbnail(uploadedFile, 200, 5);
-    } else if (type === 'application/pdf') {
-      img = await createPdfThumbnail(byteArray, 200);
-    }
-
-    img && (await fs.updateXAttrs(fullFilePath, { set: { thumbnail: img } }));
   } catch (e) {
-    const errorMessage = `An error creating of the ${uploadedFile.name} file.`;
-    console.error(errorMessage, e);
-    await w3n.log!('error', errorMessage, e);
+    if (!(e as web3n.files.FSSyncException).childNeverUploaded) {
+      await w3n.log!('error', `An error creating of the ${name} file. `, e);
+      throw e;
+    }
   }
 }

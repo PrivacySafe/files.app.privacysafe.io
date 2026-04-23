@@ -16,25 +16,39 @@
 -->
 <script lang="ts" setup>
   import { computed, ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import { storeToRefs } from 'pinia';
   import { Ui3nButton, Ui3nMenu } from '@v1nt1248/3nclient-lib';
-  import type { FsListItem } from '@/types';
+  import { useFsStore } from '@/store';
+  import type { RootFsFolderView } from '@shared/types';
 
   const props = defineProps<{
     modelValue: string;
-    fileSystems: FsListItem[];
+    availableFsFolders: RootFsFolderView[];
   }>();
 
   const emits = defineEmits<{
     (event: 'update:modelValue', value: string): void;
   }>();
 
+  const { t } = useI18n();
+
+  const { fsFolderList } = storeToRefs(useFsStore());
+
   const isMenuOpen = ref(false);
 
-  const selectedFileSystems = computed(() => props.fileSystems.find(fs => fs.fsId === props.modelValue));
+  const selectedFsFolderName = computed(() => {
+    if (!props.modelValue) {
+      return '-';
+    }
 
-  function selectItem(item: FsListItem) {
-    if (item.fsId !== props.modelValue) {
-      emits('update:modelValue', item.fsId);
+    const fsFolder = fsFolderList.value.find(f => f.id === props.modelValue);
+    return fsFolder?.name || '-';
+  });
+
+  function selectItem(id: string) {
+    if (id !== props.modelValue) {
+      emits('update:modelValue', id);
     }
   }
 </script>
@@ -54,17 +68,17 @@
       icon-position="right"
       :class="$style.fsSystemsSelector"
     >
-      {{ selectedFileSystems?.name.trim() }}
+      {{ t(selectedFsFolderName) }}
     </ui3n-button>
 
     <template #menu>
       <div
-        v-for="item in fileSystems"
-        :key="item.fsId"
-        :class="[$style.item, item.fsId === modelValue && $style.selected]"
-        @click="selectItem(item)"
+        v-for="fsFolder in availableFsFolders"
+        :key="fsFolder.id"
+        :class="[$style.item, fsFolder.id === modelValue && $style.selected]"
+        @click="selectItem(fsFolder.id)"
       >
-        {{ item.name }}
+        {{ t(fsFolder.name) }}
       </div>
     </template>
   </ui3n-menu>

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2025 3NSoft Inc.
+ Copyright (C) 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -18,17 +18,22 @@
 
 declare namespace web3n.shell.mounts {
 
-	interface VolumeMounts {
-		listMounted(): Promise<MountedVolumeInfo[]>;
-		mountFS(fs: web3n.files.FS, volumeName: string): Promise<void>;
-		unmount(volumeName: string): Promise<void>;
+	interface MountsIntoOS {
+		mountFolder(path: string[], fs: web3n.files.FS): Promise<void>;
+		mountFile(path: string[], file: web3n.files.File): Promise<void>;
+		unmountPath(path: string[]): Promise<void>;
+		unmountFolder(fs: web3n.files.FS): Promise<void>;
+		unmountFile(file: web3n.files.File): Promise<void>;
 	}
 
-	interface MountedVolumeInfo {
-		volumeName: string;
-		type: web3n.files.FSType;
-		writable: boolean;
-		mountPathInDevice: string;
+	interface MountException extends RuntimeException {
+		type: 'mount';
+		notMounted?: true;
+		cantMount?: true;
+		alreadyMounted?: true;
+		badPath?: true;
+		pathIsUsed?: true;
+		notFound?: true;
 	}
 
 }

@@ -2,7 +2,7 @@ import { type ComputedRef, ref, type Ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import size from 'lodash/size';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
-import type { ListingEntryExtended } from '@/types';
+import type { ListingEntryExtended } from '@shared/types';
 import { useFsWindowState } from '@/composables/useFsWindowState';
 import { useAbilities } from '@/composables/useAbilities';
 import { useAppStore, useRunModeInfoStore } from '@/store';
@@ -105,7 +105,7 @@ export function useFsDnD(fsWindowNumber: ComputedRef<'1' | '2'>, selectedEntitie
       await onDragEnd({
         sourceFsId: source?.fsId || null,
         data: source?.value || null,
-        targetFsId: currentWindowFsId.value,
+        targetFsId: currentWindowFsId.value as string,
         target,
       });
     }

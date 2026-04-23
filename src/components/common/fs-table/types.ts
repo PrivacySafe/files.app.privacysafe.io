@@ -1,11 +1,11 @@
 import { VNode, type ShallowUnwrapRef } from 'vue';
-import { type Ui3nTableExpose } from '@v1nt1248/3nclient-lib';
-import type { ListingEntryExtended } from '@/types';
+import { type Nullable, type Ui3nTableExpose } from '@v1nt1248/3nclient-lib';
+import type { ListingEntryExtended } from '@shared/types';
 
 export interface FsTableProps {
   fsId: string;
   rootFolderId: string;
-  window: 1 | 2;
+  windowIndex: 1 | 2;
   basePath?: {
     fullPath: string;
     title: string;
@@ -22,7 +22,7 @@ export interface FsTableEmits {
   (event: 'init', value: ShallowUnwrapRef<Ui3nTableExpose<ListingEntryExtended>>): void;
   (event: 'make:active'): void;
   (event: 'go', value: string): void;
-  (event: 'open:info', value: string): void;
+  (event: 'open:info', value: Nullable<string>): void;
   (event: 'select:entity', value: ListingEntryExtended[]): void;
 }
 

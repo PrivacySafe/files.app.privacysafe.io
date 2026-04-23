@@ -16,10 +16,22 @@
 */
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
+import cloneDeep from 'lodash/cloneDeep';
+import hasIn from 'lodash/hasIn';
 import { SystemSettings } from '@/utils/ui-settings';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
-import type { AvailableLanguage, AvailableColorTheme, ConnectivityStatus, AppConfigs, AppConfig } from '@/types';
+import type {
+  AvailableLanguage,
+  AvailableColorTheme,
+  ConnectivityStatus,
+  AppConfigs,
+  AppConfig,
+  StorageAppSettings,
+  StorageAppConfig,
+} from '@shared/types';
 import { blobFromDataURL } from '@/utils/image-files';
+import { APP_SETTINGS_DEFAULT } from '@shared/constants';
+import { loadConfigFile, saveConfigFile } from '../../src-deno/actions-with-app-config.ts';
 
 export const useAppStore = defineStore('app', () => {
   const appVersion = ref<string>('');
@@ -34,7 +46,8 @@ export const useAppStore = defineStore('app', () => {
   });
   // @ts-ignore
   const operatingSystem = ref<'macos' | 'linux' | 'windows'>(navigator.userAgentData?.platform.toLowerCase());
-  const areSystemFoldersShowing = ref(false);
+
+  const appStorageSettings = ref<StorageAppSettings>(cloneDeep(APP_SETTINGS_DEFAULT));
   const commonLoading = ref<boolean>(false);
 
   const trashFolderName = computed(() => `.trash-folder-${user.value || ''}`);
@@ -86,10 +99,6 @@ export const useAppStore = defineStore('app', () => {
     htmlEl.classList.add(curColorThemeCssClass);
   }
 
-  function setSystemFoldersDisplaying(value: boolean) {
-    areSystemFoldersShowing.value = value;
-  }
-
   async function setCustomLogo(dataURL: AppConfig['customLogo']): Promise<void> {
     if (dataURL) {
       try {
@@ -106,16 +115,41 @@ export const useAppStore = defineStore('app', () => {
   async function getAppConfig(): Promise<AppConfigs | undefined> {
     try {
       const config = await SystemSettings.makeResourceReader();
-      const { lang, colorTheme, systemFoldersDisplaying, customLogo } = await config.getAll();
+      const { lang, colorTheme, customLogo } = await config.getAll();
       setLang(lang);
       setColorTheme(colorTheme);
-      setSystemFoldersDisplaying(systemFoldersDisplaying);
       setCustomLogo(customLogo);
 
       return config;
     } catch (e) {
       console.error('Load the app config error: ', e);
     }
+  }
+
+  async function getAppStorageSettings(): Promise<StorageAppConfig> {
+    const appFs = await w3n.storage!.getAppLocalFS();
+    const data = await loadConfigFile(appFs);
+    if (data) {
+      Object.keys(APP_SETTINGS_DEFAULT).forEach(field => {
+        if (hasIn(data, field)) {
+          appStorageSettings.value[field as keyof StorageAppSettings] = data[field as keyof StorageAppSettings];
+        }
+      });
+    }
+
+    return {
+      ...appStorageSettings.value,
+      trashFolderName: data!.trashFolderName,
+    };
+  }
+
+  async function setAppStorageSettings<K extends keyof StorageAppSettings>(field: K, value: StorageAppSettings[K]) {
+    const appFs = await w3n.storage!.getAppLocalFS();
+    const appStorageConfig = await getAppStorageSettings();
+
+    appStorageSettings.value[field] = value;
+    appStorageConfig[field] = value;
+    await saveConfigFile(appFs, appStorageConfig);
   }
 
   return {
@@ -127,7 +161,7 @@ export const useAppStore = defineStore('app', () => {
     colorTheme,
     customLogoSrc,
     appWindowSize,
-    areSystemFoldersShowing,
+    appStorageSettings,
     commonLoading,
     trashFolderName,
     getAppVersion,
@@ -137,8 +171,9 @@ export const useAppStore = defineStore('app', () => {
     setCommonLoading,
     setLang,
     setColorTheme,
-    setSystemFoldersDisplaying,
     setCustomLogo,
     getAppConfig,
+    getAppStorageSettings,
+    setAppStorageSettings,
   };
 });

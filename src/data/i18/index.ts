@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2024-2025 3NSoft Inc.
+ Copyright (C) 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -14,24 +14,20 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
+import { createI18n } from 'vue-i18n';
+import { en } from './en';
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-export async function updateXAttrs({
-  fs,
-  path,
-  attrs,
-}: {
-  fs: web3n.files.WritableFS;
-  path: string;
-  attrs: Record<string, any | undefined>;
-}) {
-  try {
-    await fs.updateXAttrs(path, {
-      set: attrs,
-    });
-  } catch (e) {
-    const attrNames = Object.keys(attrs).join(', ');
-    const errorMessage = `Error update xAttrs (${attrNames}) in the entity ${path}. `;
-    await w3n.log!('error', errorMessage, e);
-  }
-}
+const messages = {
+  en,
+};
+
+const i18nInstance = createI18n({
+  legacy: false,
+  locale: 'en',
+  fallbackLocale: 'en',
+  fallbackWarn: false,
+  missingWarn: false,
+  messages,
+});
+
+export default i18nInstance;

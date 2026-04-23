@@ -15,24 +15,27 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-  import { computed, inject, onBeforeUnmount, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import dayjs from 'dayjs';
   import isEmpty from 'lodash/isEmpty';
-  import { type Nullable, Ui3nButton, Ui3nChip, Ui3nIcon, Ui3nProgressCircular } from '@v1nt1248/3nclient-lib';
-  import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
+  import { type Nullable, Ui3nButton, Ui3nChip, Ui3nIcon, Ui3nProgressCircular, Ui3nClickOutside } from '@v1nt1248/3nclient-lib';
   import { formatFileSize, isFileImage, isFileVideo } from '@v1nt1248/3nclient-lib/utils';
-  import { useFsEntryStore } from '@/store';
-  import type { FsSEntityInfoProps, FsSEntityInfoEmits } from './types';
-  import type { ListingEntryExtended } from '@/types';
+  import { useFsStore } from '@/store';
   import { useFileHashing } from './useFileHashing';
   import { createThumbnail } from '@/utils';
+  import type { FsSEntityInfoProps, FsSEntityInfoEmits } from './types';
+  import type { ListingEntryExtended } from '@shared/types';
+
+  const vUi3nClickOutside = Ui3nClickOutside;
 
   const props = defineProps<FsSEntityInfoProps>();
   const emits = defineEmits<FsSEntityInfoEmits>();
 
-  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
-  const { getEntityStats, getSyncedStatus } = useFsEntryStore();
+  const { t } = useI18n();
+  const { getEntityStats, getSyncedStatus } = useFsStore();
 
+  const isLoading = ref(false);
   const entityStats = ref<Nullable<ListingEntryExtended & { thumbnail?: string }>>(null);
   const entitySyncStatus = ref<web3n.files.SyncStatus>({} as web3n.files.SyncStatus);
 
@@ -51,7 +54,7 @@
     stopHashingProcess,
   } = useFileHashing(fsIdValue, pathValue, entityStats);
 
-  const canHash = computed(() => entityStats.value?.isFile
+  const canHash = computed(() => entityStats.value?.type === 'file'
     && entityStats.value?.mtime
     && (typeof entityStats.value?.size === 'number'),
   );
@@ -66,7 +69,7 @@
       return '';
     }
 
-    return $tr(`fs.entity.info.type.${entityStats.value!.type}`);
+    return t(`fs.entity.info.type.${entityStats.value!.type}`);
   });
 
   const entityPath = computed(() => {
@@ -110,8 +113,6 @@
     return entityStats.value!.tags;
   });
 
-  const isLoading = ref(false);
-
   async function loadEntity(fullPath: string) {
     try {
       isLoading.value = true;
@@ -132,8 +133,10 @@
         stopHashingProcess();
         await loadEntity(val);
 
-        const sStatus = await getSyncedStatus({ fsId: props.fsId, fullPath: val });
-        entitySyncStatus.value = sStatus || {} as web3n.files.SyncStatus;
+        if (props.fsId.includes('synced')) {
+          const sStatus = await getSyncedStatus({ fsId: props.fsId, fullPath: val });
+          entitySyncStatus.value = sStatus || {} as web3n.files.SyncStatus;
+        }
 
         const { type, thumbnail, ext } = entityStats.value!;
         if (
@@ -160,7 +163,10 @@
 </script>
 
 <template>
-  <div :class="$style.fsEntityInfo">
+  <div
+    v-ui3n-click-outside="() => emits('close')"
+    :class="$style.fsEntityInfo"
+  >
     <div
       :class="$style.header"
       @click="emits('close')"
@@ -172,9 +178,10 @@
       <ui3n-button
         type="icon"
         size="small"
-        color="transparent"
-        icon="vertical-align-top"
+        color="var(--color-bg-block-primary-default)"
+        icon="round-close"
         icon-color="var(--color-icon-control-primary-default)"
+        icon-size="16"
       />
     </div>
 
@@ -202,117 +209,121 @@
       </div>
     </div>
 
-    <div :class="$style.row">
-      <span>{{ $tr('fs.entity.info.type') }}</span>
-      <div>{{ entityType }}</div>
-    </div>
-
-    <div :class="$style.row">
-      <span>{{ $tr('fs.entity.info.path') }}</span>
-      <div>{{ entityPath }}</div>
-    </div>
-
-    <div :class="$style.row">
-      <span>{{ $tr('fs.entity.info.size') }}</span>
-      <div>{{ entitySize }}</div>
-    </div>
-
-    <div :class="$style.row">
-      <span>{{ $tr('fs.entity.info.date') }}</span>
-      <div>{{ entityDate }}</div>
-    </div>
-
-    <div :class="$style.row">
-      <span>{{ $tr('fs.entity.info.changes') }}</span>
-      <div>{{ entityChanges }}</div>
-    </div>
-
-    <div :class="$style.row">
-      <span>{{ $tr('fs.entity.info.tags') }}</span>
-      <div>
-        <Ui3nChip
-          v-for="tag in entityTags"
-          :key="tag"
-          :round="false"
-          height="14"
-          text-size="9"
-          color="'var(--color-bg-control-secondary-default)'"
-          text-color="var(--color-text-control-primary-default)"
-        >
-          {{ tag }}
-        </Ui3nChip>
+    <div :class="$style.content">
+      <div :class="$style.row">
+        <span>{{ t('fs.entity.info.type') }}</span>
+        <div>{{ entityType }}</div>
       </div>
-    </div>
 
-    <div :class="$style.row">
-      <span>{{ $tr('fs.entity.info.status') }}</span>
-      <section>
-        <p>state: <i>{{ entitySyncStatus?.state }}</i></p>
+      <div :class="$style.row">
+        <span>{{ t('fs.entity.info.path') }}</span>
+        <div>{{ entityPath }}</div>
+      </div>
 
-        <p v-if="entitySyncStatus?.local">
-          local ver: <i>{{ entitySyncStatus?.local.latest }}</i>
-        </p>
+      <div :class="$style.row">
+        <span>{{ t('fs.entity.info.size') }}</span>
+        <div>{{ entitySize }}</div>
+      </div>
 
-        <p v-if="entitySyncStatus?.synced">
-          synced ver: <i>{{ entitySyncStatus?.synced.latest }}</i>
-        </p>
+      <div :class="$style.row">
+        <span>{{ t('fs.entity.info.date') }}</span>
+        <div>{{ entityDate }}</div>
+      </div>
 
-        <p v-if="entitySyncStatus?.remote">
-          remote ver: <i>{{ entitySyncStatus?.remote.latest }}</i>
-        </p>
-      </section>
-    </div>
+      <div :class="$style.row">
+        <span>{{ t('fs.entity.info.changes') }}</span>
+        <div>{{ entityChanges }}</div>
+      </div>
 
-    <template v-if="canHash">
-      <div
-        v-if="(!sha256hex || !sha512hex) && !(calculating256 || calculating512)"
-        :class="$style.actions"
-      >
-        <ui3n-button
-          type="secondary"
-          @click.stop.prevent="calculateHash"
-        >
-          {{ $tr('fs.entity.info.calculate.hash') }}
-        </ui3n-button>
+      <div :class="$style.row">
+        <span>{{ t('fs.entity.info.tags') }}</span>
+        <div>
+          <Ui3nChip
+            v-for="tag in entityTags"
+            :key="tag"
+            :round="false"
+            height="14"
+            text-size="9"
+            color="'var(--color-bg-control-secondary-default)'"
+            text-color="var(--color-text-control-primary-default)"
+          >
+            {{ tag }}
+          </Ui3nChip>
+        </div>
       </div>
 
       <div
-        v-if="sha256hex || calculating256"
+        v-if="fsId.includes('synced')"
         :class="$style.row"
       >
-        <span>SHA-256</span>
+        <span>{{ t('fs.entity.info.status') }}</span>
+        <section>
+          <p>state: <i>{{ entitySyncStatus?.state }}</i></p>
 
-        <div v-if="sha256hex">
-          {{ sha256hex }}
+          <p v-if="entitySyncStatus?.local">
+            local ver: <i>{{ entitySyncStatus?.local.latest }}</i>
+          </p>
+
+          <p v-if="entitySyncStatus?.synced">
+            synced ver: <i>{{ entitySyncStatus?.synced.latest }}</i>
+          </p>
+
+          <p v-if="entitySyncStatus?.remote">
+            remote ver: <i>{{ entitySyncStatus?.remote.latest }}</i>
+          </p>
+        </section>
+      </div>
+
+      <template v-if="canHash">
+        <div
+          v-if="(!sha256hex || !sha512hex) && !(calculating256 || calculating512)"
+          :class="$style.actions"
+        >
+          <ui3n-button
+            type="secondary"
+            @click.stop.prevent="calculateHash"
+          >
+            {{ t('fs.entity.info.calculate_hash') }}
+          </ui3n-button>
         </div>
 
         <div
-          v-if="calculating256"
-          :class="$style.progress"
+          v-if="sha256hex || calculating256"
+          :class="$style.row"
         >
-          {{ sha256progress }}%
-        </div>
-      </div>
+          <span>SHA-256</span>
 
-      <div
-        v-if="sha512hex || calculating512"
-        :class="$style.row"
-      >
-        <span>SHA-512</span>
+          <div v-if="sha256hex">
+            {{ sha256hex }}
+          </div>
 
-        <div v-if="sha512hex">
-          {{ sha512hex }}
+          <div
+            v-if="calculating256"
+            :class="$style.progress"
+          >
+            {{ sha256progress }}%
+          </div>
         </div>
 
         <div
-          v-if="calculating512"
-          :class="$style.progress"
+          v-if="sha512hex || calculating512"
+          :class="$style.row"
         >
-          {{ sha512progress }}%
-        </div>
-      </div>
-    </template>
+          <span>SHA-512</span>
 
+          <div v-if="sha512hex">
+            {{ sha512hex }}
+          </div>
+
+          <div
+            v-if="calculating512"
+            :class="$style.progress"
+          >
+            {{ sha512progress }}%
+          </div>
+        </div>
+      </template>
+    </div>
 
     <div
       v-if="isLoading"
@@ -333,6 +344,7 @@
     position: relative;
     width: 100%;
     height: 100%;
+    background-color: var(--color-bg-block-primary-default);
   }
 
   .header {
@@ -386,6 +398,13 @@
     background-position: center;
     background-size: cover;
     background-repeat: no-repeat;
+  }
+
+  .content {
+    position: relative;
+    width: calc(100% - var(--spacing-xs));
+    height: calc(100% - 292px);
+    overflow-y: auto;
   }
 
   .favorite {

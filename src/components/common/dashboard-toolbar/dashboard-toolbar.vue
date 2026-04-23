@@ -15,39 +15,45 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-  import { computed } from 'vue';
+  import { computed, inject } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { storeToRefs } from 'pinia';
   import { Ui3nButton, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
   import { useNavigation } from '@/composables/useNavigation';
-  import { useAppStore, useFsStore, useRunModeInfoStore } from '@/store';
-  import { START_OF_SYSTEM_FS_ID } from '@/constants';
+  import { useFsStore, useRunModeInfoStore } from '@/store';
+  import { USER_TRASH_FOLDER, USER_TRASH_LOCAL_FOLDER } from '@shared/constants';
+  import type { FsEntityInfoProvideProps } from '@shared/types';
   import FsSystemsSelector from '@/components/common/dashboard-toolbar/fs-systems-selector.vue';
   import SortingSelector from '@/components/common/dashboard-toolbar/sorting-selector.vue';
   import FolderPath from '@/components/common/dashboard-toolbar/folder-path.vue';
 
-  const { isTileView, isSplittedMode, activeWindow, navigateToRouteSingle, navigateToRouteDouble } = useNavigation();
+  const { t } = useI18n();
 
-  const { areSystemFoldersShowing } = storeToRefs(useAppStore());
-  const { fsList } = storeToRefs(useFsStore());
+  const { isTileView, isSplittedMode, activeWindow, navigateToRouteSingle, navigateToRouteDouble } =
+    useNavigation();
+
+  const { fsAvailableFolderList } = storeToRefs(useFsStore());
 
   const runModeInfoStore = useRunModeInfoStore();
-  const { processedPath, currentFsId, isCurrentRootFsFolderTrash } = storeToRefs(runModeInfoStore);
+  const { processedPath, currentRootFsFolder, isCurrentRootFsFolderTrash } = storeToRefs(runModeInfoStore);
   const { toggleView, toggleMode } = runModeInfoStore;
 
-  const availableFileSystems = computed(() => Object.values(fsList.value).filter(fs => {
-    if (areSystemFoldersShowing.value) {
-      return true;
-    }
+  const { openFsEntityInfoBlock } = inject<FsEntityInfoProvideProps>('fsEntityInfo')!;
 
-    return !fs.fsId.includes(START_OF_SYSTEM_FS_ID);
-  }));
+  const availableFsFolders = computed(() =>
+    fsAvailableFolderList.value.filter(fsFolder =>
+      isSplittedMode.value ? ![USER_TRASH_FOLDER, USER_TRASH_LOCAL_FOLDER].includes(fsFolder.id) : true,
+    ),
+  );
 
-  function changeFs(id: string) {
+  function changeFsFolder(id: string) {
+    openFsEntityInfoBlock(null);
+
     if (isSplittedMode.value) {
       return navigateToRouteDouble({
         params: {
-          ...(activeWindow.value === '1' && { fsId: id, folderId: `${id}-root` }),
-          ...(activeWindow.value === '2' && { fs2Id: id, folder2Id: `${id}-root` }),
+          ...(activeWindow.value === '1' && { rootFolderId: id }),
+          ...(activeWindow.value === '2' && { rootFolder2Id: id }),
         },
         query: {
           view: isTileView.value ? 'tile' : 'table',
@@ -58,7 +64,7 @@
     }
 
     return navigateToRouteSingle({
-      params: { fsId: id, folderId: `${id}-root` },
+      params: { rootFolderId: id },
       query: { view: isTileView.value ? 'tile' : 'table' },
     });
   }
@@ -76,14 +82,14 @@
       ]"
     >
       <fs-systems-selector
-        :model-value="currentFsId"
-        :file-systems="availableFileSystems"
-        @update:model-value="changeFs"
+        :model-value="currentRootFsFolder"
+        :available-fs-folders="availableFsFolders"
+        @update:model-value="changeFsFolder"
       />
 
       <div :class="$style.path">
         <folder-path
-          :current-fs-id="currentFsId"
+          :current-fs-folder="currentRootFsFolder"
           :path="processedPath"
         />
       </div>
@@ -96,7 +102,9 @@
       />
 
       <ui3n-tooltip
-        :content="isTileView ? $tr('dashboard.toolbar.table.view.tooltip') : $tr('dashboard.toolbar.tile.view.tooltip')"
+        :content="
+          isTileView ? t('dashboard.toolbar.tooltip.table_view') : t('dashboard.toolbar.tooltip.tile_view')
+        "
         position-strategy="fixed"
         placement="top-end"
       >
@@ -111,7 +119,9 @@
 
       <template v-if="!isCurrentRootFsFolderTrash">
         <ui3n-tooltip
-          :content="isSplittedMode ? $tr('dashboard.toolbar.simple.mode.tooltip') : $tr('dashboard.toolbar.split.mode.tooltip')"
+          :content="
+            isSplittedMode ? t('dashboard.toolbar.tooltip.simple_mode') : t('dashboard.toolbar.tooltip.split_mode')
+          "
           position-strategy="fixed"
           placement="top-end"
         >

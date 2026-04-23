@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2024-2025 3NSoft Inc.
+ Copyright (C) 2022 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -14,19 +14,21 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import { getRandomId } from '@v1nt1248/3nclient-lib/utils';
 
-export async function createFolderInFS({ fs, path }: { fs: web3n.files.WritableFS; path: string }): Promise<void> {
-  try {
-    await fs!.makeFolder(path);
+import { bytesToUrlSafeBase64 } from './base64.ts';
 
-    const isThisFsDevice = fs.type === 'device';
-    !isThisFsDevice &&
-      (await fs!.updateXAttrs(path, {
-        set: { id: getRandomId(16) },
-      }));
-  } catch (e) {
-    const errorMessage = `Error making folder ${path}. `;
-    await w3n.log!('error', errorMessage, e);
+export function randomStr(numOfChars: number): string {
+  if (numOfChars < 1) {
+    throw new Error(`number of chars is less than one`);
   }
+  const byteLen = 3 * (Math.floor(numOfChars / 4) + 1);
+  const bytes = new Uint8Array(byteLen);
+  crypto.getRandomValues(bytes);
+  return bytesToUrlSafeBase64(bytes).slice(0, numOfChars);
+}
+
+export function randomBytes(numOfBytes: number): Uint8Array {
+  const bytes = new Uint8Array(numOfBytes);
+  crypto.getRandomValues(bytes);
+  return bytes;
 }

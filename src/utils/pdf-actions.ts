@@ -1,10 +1,14 @@
 import * as pdfjs from 'pdfjs-dist';
 import { schedulerYield } from '@v1nt1248/3nclient-lib/utils';
 
+/*
+ * !!! byteArray will be consumed
+ * */
 export async function createPdfThumbnail(byteArray: Uint8Array, targetSize: number): Promise<string> {
   pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
 
   const pdf = await pdfjs.getDocument(byteArray).promise;
+  // !!! in this code line byte array is already empty
   const page1 = await pdf.getPage(1);
   let viewport = page1.getViewport({ scale: 1 });
   viewport = page1.getViewport({ scale: targetSize / viewport.width });
@@ -15,6 +19,7 @@ export async function createPdfThumbnail(byteArray: Uint8Array, targetSize: numb
   const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
   await schedulerYield();
   await page1.render({
+    canvas,
     canvasContext: ctx,
     viewport,
   }).promise;

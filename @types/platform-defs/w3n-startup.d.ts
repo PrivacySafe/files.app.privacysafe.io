@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2024-2025 3NSoft Inc.
+ Copyright (C) 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -14,21 +14,23 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-export async function deleteXAttrs({
-  fs,
-  path,
-  attrNames,
-}: {
-  fs: web3n.files.WritableFS;
-  path: string;
-  attrNames: string[];
-}) {
-  try {
-    await fs.updateXAttrs(path, {
-      remove: attrNames,
-    });
-  } catch (e) {
-    const errorMessage = `Error delete xAttrs (${attrNames.join(', ')}) in the entity ${path}. `;
-    await w3n.log!('error', errorMessage, e);
-  }
+
+declare namespace web3n.caps.startup {
+
+	interface DefaultProviderSite {
+		openSiteInChildWindow: (url: string) => Promise<void>;
+		closeSite: () => Promise<void>;
+		getSignupToken: () => Promise<string>;
+	}
+
+	interface ViewBounds {
+		x: number;
+		y: number;
+		width: number;
+		height: number;
+	}
+
+	interface W3N extends web3n.startup.W3N {
+		provider: DefaultProviderSite;
+	}
 }

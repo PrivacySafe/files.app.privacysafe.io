@@ -1,29 +1,31 @@
 <script lang="ts" setup>
-  import { computed, inject } from 'vue';
+  import { computed } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import isEmpty from 'lodash/isEmpty';
-  import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
   import { Ui3nButton, Ui3nSwitch, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
   import { useAbilities } from '@/composables/useAbilities';
   import { FS_TABLE_BULK_ACTIONS } from '@/constants';
-  import { FsTableBulkActionsProps, FsTableBulkActionsEmits } from './types';
+  import type { FsTableBulkActionsProps, FsTableBulkActionsEmits } from './types';
 
   const props = withDefaults(defineProps<FsTableBulkActionsProps>(), {
-    window: 1,
+    windowIndex: 1,
+    selectedEntities: () => [],
   });
   const emits = defineEmits<FsTableBulkActionsEmits>();
 
-  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+  const { t } = useI18n();
 
   const isSelectedEmpty = computed(() => isEmpty(props.selectedEntities));
 
-  const { canRestore, canDelete, canDeleteCompletely, canCopyMove } = useAbilities();
+  const { canDownload, canRestore, canDelete, canDeleteCompletely, canCopyMove, canResolve } = useAbilities();
 </script>
 
 <template>
   <div :class="$style.fsHomeTableBulkActions">
     <div :class="$style.actionsBlock">
       <ui3n-tooltip
-        :content="FS_TABLE_BULK_ACTIONS['download']?.tooltip || ''"
+        v-if="canDownload(selectedEntities)"
+        :content="FS_TABLE_BULK_ACTIONS['download']?.tooltip ? t(FS_TABLE_BULK_ACTIONS['download']!.tooltip) : ''"
         :disabled="!FS_TABLE_BULK_ACTIONS['download']?.tooltip"
         position-strategy="fixed"
         placement="top-start"
@@ -39,8 +41,13 @@
       </ui3n-tooltip>
 
       <ui3n-tooltip
-        v-if="canRestore(fsId, rootFolderId, folderPath)"
-        :content="FS_TABLE_BULK_ACTIONS['restore']?.tooltip || ''"
+        v-if="canRestore({
+          currentFsId: fsId,
+          currentRootFolderId: rootFolderId,
+          currentFolderPath: folderPath,
+          selectedEntities}
+        )"
+        :content="FS_TABLE_BULK_ACTIONS['restore']?.tooltip ? t(FS_TABLE_BULK_ACTIONS['restore']!.tooltip) : ''"
         :disabled="!FS_TABLE_BULK_ACTIONS['restore']?.tooltip"
         position-strategy="fixed"
         placement="top-start"
@@ -56,8 +63,25 @@
       </ui3n-tooltip>
 
       <ui3n-tooltip
+        v-if="canResolve(fsId, selectedEntities)"
+        :content="FS_TABLE_BULK_ACTIONS['resolve']?.tooltip ? t(FS_TABLE_BULK_ACTIONS['resolve']!.tooltip) : ''"
+        :disabled="!FS_TABLE_BULK_ACTIONS['resolve']?.tooltip"
+        position-strategy="fixed"
+        placement="top-start"
+      >
+        <ui3n-button
+          type="icon"
+          color="var(--color-bg-block-primary-default)"
+          :icon="FS_TABLE_BULK_ACTIONS['resolve']!.icon"
+          :icon-color="FS_TABLE_BULK_ACTIONS['resolve']!.iconColor ?? 'var(--color-icon-table-primary-default)'"
+          :disabled="disabled || isSelectedEmpty"
+          @click.stop.prevent="emits('action', { action: 'resolve' })"
+        />
+      </ui3n-tooltip>
+
+      <ui3n-tooltip
         v-if="canDelete(fsId, rootFolderId)"
-        :content="FS_TABLE_BULK_ACTIONS['delete']?.tooltip || ''"
+        :content="FS_TABLE_BULK_ACTIONS['delete']?.tooltip ? t(FS_TABLE_BULK_ACTIONS['delete']!.tooltip) : ''"
         :disabled="!FS_TABLE_BULK_ACTIONS['delete']?.tooltip"
         position-strategy="fixed"
         placement="top-start"
@@ -74,7 +98,7 @@
 
       <ui3n-tooltip
         v-if="canDeleteCompletely(fsId, rootFolderId, folderPath)"
-        :content="FS_TABLE_BULK_ACTIONS['delete:completely']?.tooltip || ''"
+        :content="FS_TABLE_BULK_ACTIONS['delete:completely']?.tooltip ? t(FS_TABLE_BULK_ACTIONS['delete:completely']!.tooltip) : ''"
         :disabled="!FS_TABLE_BULK_ACTIONS['delete:completely']?.tooltip"
         position-strategy="fixed"
         placement="top-start"
@@ -91,13 +115,13 @@
     </div>
 
     <div
-      v-if="canCopyMove"
+      v-if="canCopyMove(rootFolderId) && isInSplitMode"
       :class="$style.actionsBlock"
     >
-      <span>{{ $tr('fs.entity.copy') }}</span>
+      <span>{{ t('fs.action.copy_label') }}</span>
 
       <ui3n-tooltip
-        :content="FS_TABLE_BULK_ACTIONS['copy/move']?.tooltip || ''"
+        :content="FS_TABLE_BULK_ACTIONS['copy/move']?.tooltip ? t(FS_TABLE_BULK_ACTIONS['copy/move']!.tooltip) : ''"
         :disabled="!FS_TABLE_BULK_ACTIONS['copy/move']?.tooltip"
         position-strategy="fixed"
         placement="top-end"
@@ -109,7 +133,7 @@
         />
       </ui3n-tooltip>
 
-      <span>{{ $tr('fs.entity.move') }}</span>
+      <span>{{ t('fs.action.move_label') }}</span>
     </div>
   </div>
 </template>

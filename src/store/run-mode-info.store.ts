@@ -15,15 +15,19 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import { computed, type ComputedRef, ref } from 'vue';
-import { defineStore } from 'pinia';
+import { useI18n } from 'vue-i18n';
+import { defineStore, storeToRefs } from 'pinia';
 import isEmpty from 'lodash/isEmpty';
 import size from 'lodash/size';
 import { useNavigation } from '@/composables/useNavigation';
-import { useAppStore, useFsEntryStore } from '@/store';
-import type { ListingEntryExtended, RouteDouble, RouteSingle } from '@/types';
+import { useAppStore, useFsStore } from '@/store';
+import { getParentPath } from '@shared/utils/fs-utils';
+import type { ListingEntryExtended, RouteDouble, RouteSingle } from '@shared/types';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
 
 export const useRunModeInfoStore = defineStore('run-mode-info', () => {
+  const { t } = useI18n();
+
   const {
     route,
     isSplittedMode,
@@ -34,9 +38,11 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
     selectActiveWindow,
   } = useNavigation();
 
-  const { setCommonLoading, $emitter, $i18n, $createNotice } = useAppStore();
+  const { setCommonLoading, $emitter, $createNotice } = useAppStore();
 
-  const { deleteEntity, copyMoveEntities } = useFsEntryStore();
+  const fsStore = useFsStore();
+  const { fsFolderList } = storeToRefs(fsStore);
+  const { deleteEntity, copyMoveEntities } = fsStore;
 
   const isDragging = ref(false);
   const isMoveMode = ref(false);
@@ -52,19 +58,20 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
     return path;
   });
 
-  const currentFsId = computed(() => {
-    if (isSplittedMode.value) {
-      return activeWindow.value === '1' ? route.params.fsId : route.params.fs2Id;
-    }
-
-    return route.params.fsId;
-  }) as ComputedRef<string>;
-
-  const parentSelectedFolder = computed(() => route.params.folderId) as ComputedRef<string>;
+  const parentSelectedFolder = computed(() => route.params.rootFolderId) as ComputedRef<string>;
 
   const currentRootFsFolder = computed(() =>
-    isSplittedMode.value && activeWindow.value === '2' ? route.params.folder2Id : route.params.folderId,
+    isSplittedMode.value && activeWindow.value === '2' ? route.params.rootFolder2Id : route.params.rootFolderId,
   ) as ComputedRef<string>;
+
+  const currentFsId = computed(() => {
+    if (!currentRootFsFolder.value) {
+      return null;
+    }
+
+    const fsFolder = fsFolderList.value.find(f => f.id === currentRootFsFolder.value);
+    return fsFolder ? (fsFolder.fsId as string) : null;
+  });
 
   const isCurrentRootFsFolderTrash = computed(() => currentRootFsFolder.value.includes('-trash'));
 
@@ -89,18 +96,18 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
   }
 
   async function toggleMode() {
-    const { fsId, folderId } = route.params as RouteSingle['params'] | RouteDouble['params'];
+    const { rootFolderId } = route.params as RouteSingle['params'] | RouteDouble['params'];
     const { path } = route.query as RouteSingle['query'] | RouteDouble['query'];
 
     if (isSplittedMode.value) {
       return navigateToRouteSingle({
-        params: { fsId, folderId },
+        params: { rootFolderId },
         query: { path },
       });
     }
 
     return navigateToRouteDouble({
-      params: { fsId, folderId, fs2Id: fsId, folder2Id: folderId },
+      params: { rootFolderId, rootFolder2Id: rootFolderId },
       query: { path, path2: '', activeWindow: '1' },
     });
   }
@@ -116,12 +123,19 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
   }) {
     try {
       setCommonLoading(true);
+      if (!isEmpty(entities)) {
+        for (let i = 0; i < entities.length; i++) {
+          const whetherStartSync = i === entities.length - 1;
+          await deleteEntity({ fsId, entity: entities[i], completely, withoutSync: !whetherStartSync });
+        }
 
-      const processes = entities.map(entity => deleteEntity({ fsId, entity, completely }));
-
-      await Promise.allSettled(processes);
-
-      $emitter.emit('refresh:data', void 0);
+        if (completely) {
+          $emitter.emit('refresh:data', { path: '', withoutVerify: false });
+        } else {
+          const parentFolder = getParentPath(entities[0].fullPath);
+          $emitter.emit('refresh:data', { path: parentFolder });
+        }
+      }
     } finally {
       setCommonLoading(false);
     }
@@ -161,40 +175,30 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
       });
 
       $emitter.emit('drag:end', void 0);
-      $emitter.emit('refresh:data', void 0);
+      $emitter.emit('refresh:data', { path: target.fullPath });
 
-      const successMessageSingle =
+      const successMessage =
         isMoveMode.value || isMoveModeQuick.value
-          ? $i18n.tr('fs.entity.move.single.message.success')
-          : $i18n.tr('fs.entity.copy.single.message.success');
-
-      const successMessageMulti =
-        isMoveMode.value || isMoveModeQuick.value
-          ? $i18n.tr('fs.entity.move.plural.message.success', { count: `${size(data)}` })
-          : $i18n.tr('fs.entity.copy.plural.message.success', { count: `${size(data)}` });
+          ? t('fs.entity.message.success.move', { count: size(data) })
+          : t('fs.entity.message.success.copy', { count: size(data) });
 
       $createNotice({
         type: 'success',
         withIcon: true,
-        content: size(data) > 1 ? successMessageMulti : successMessageSingle,
+        content: successMessage,
       });
     } catch (e) {
       console.error(e);
 
-      const errorMessageSingle =
+      const errorMessage =
         isMoveMode.value || isMoveModeQuick.value
-          ? $i18n.tr('fs.entity.move.single.message.error')
-          : $i18n.tr('fs.entity.copy.single.message.error');
-
-      const errorMessageMulti =
-        isMoveMode.value || isMoveModeQuick.value
-          ? $i18n.tr('fs.entity.move.plural.message.error', { count: `${size(data)}` })
-          : $i18n.tr('fs.entity.copy.plural.message.error', { count: `${size(data)}` });
+          ? t('fs.entity.message.error.move', { count: size(data) })
+          : t('fs.entity.message.error.copy', { count: size(data) });
 
       $createNotice({
         type: 'error',
         withIcon: true,
-        content: size(data) > 1 ? errorMessageMulti : errorMessageSingle,
+        content: errorMessage,
       });
     } finally {
       toggleCopyMoveMode(false);
@@ -210,8 +214,8 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
     isSplittedMode,
     activeWindow,
     processedPath,
-    currentFsId,
     currentRootFsFolder,
+    currentFsId,
     parentSelectedFolder,
     isCurrentRootFsFolderTrash,
     isCurrentRootFsFolderSystem,

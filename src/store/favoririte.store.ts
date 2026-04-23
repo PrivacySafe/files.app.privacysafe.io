@@ -14,34 +14,32 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import { computed, ref } from 'vue';
+import { computed, ComputedRef, ref } from 'vue';
 import { defineStore } from 'pinia';
-import { dbSrv } from '@/services/services-provider';
-import type { FavoriteFolder } from '@/types';
+import { appStorageSrv } from '@/services/services-provider';
+import type { FavoriteFolder, FavoriteFolderDb } from '@shared/types';
 
 export const useFavoriteStore = defineStore('favorite', () => {
-  const favoriteFolders = ref<FavoriteFolder[]>([]);
+  const favoriteFolders = ref<FavoriteFolderDb[]>([]);
 
-  const processedFavoriteFolders = computed<
-    Array<
-      FavoriteFolder & {
-        folderName?: string;
-      }
-    >
-  >(() =>
-    favoriteFolders.value.map(item => {
+  const processedFavoriteFolders = computed(() => {
+    return favoriteFolders.value.map(item => {
       const parsedFullPath = item.fullPath.split('/');
       const folderName = parsedFullPath.pop();
       return {
         ...item,
         folderName,
       };
-    }),
-  );
+    });
+  }) as ComputedRef<FavoriteFolder[]>;
+
+  function setFavoriteFolderListValue(value: FavoriteFolderDb[]) {
+    favoriteFolders.value = value;
+  }
 
   async function getFavoriteFolderList() {
     try {
-      favoriteFolders.value = await dbSrv.getFavorites();
+      favoriteFolders.value = await appStorageSrv.getFavorites();
     } catch (e) {
       w3n.log('error', 'Failed to get favorite folders', e);
     }
@@ -55,9 +53,9 @@ export const useFavoriteStore = defineStore('favorite', () => {
     fullPath: string;
   }): Promise<string | undefined> {
     try {
-      const favFolderId = await dbSrv.addFavorite({ fsId, fullPath });
-      await getFavoriteFolderList();
-      return favFolderId;
+      const { folderId, updatedFolderList } = await appStorageSrv.addFavorite({ fsId, fullPath });
+      favoriteFolders.value = updatedFolderList;
+      return folderId;
     } catch (e) {
       w3n.log('error', `Failed to add favorite folder [${fullPath}]`, e);
     }
@@ -73,8 +71,7 @@ export const useFavoriteStore = defineStore('favorite', () => {
     fullPath: string;
   }): Promise<void> {
     try {
-      await dbSrv.updateFavorite({ fsId, id, fullPath });
-      await getFavoriteFolderList();
+      favoriteFolders.value = await appStorageSrv.updateFavorite({ fsId, id, fullPath });
     } catch (e) {
       w3n.log('error', `Failed to update favorite folder [${fullPath}]`, e);
     }
@@ -87,7 +84,7 @@ export const useFavoriteStore = defineStore('favorite', () => {
         return;
       }
 
-      favoriteFolders.value = await dbSrv.deleteFavorite(favoriteFolderId);
+      favoriteFolders.value = await appStorageSrv.deleteFavorite(favoriteFolderId);
     } catch (e) {
       w3n.log('error', `Failed to delete favorite folder [${favoriteFolderId}]`, e);
     }
@@ -96,6 +93,7 @@ export const useFavoriteStore = defineStore('favorite', () => {
   return {
     favoriteFolders,
     processedFavoriteFolders,
+    setFavoriteFolderListValue,
     getFavoriteFolderList,
     addFavoriteFolder,
     updateFavoriteFolder,

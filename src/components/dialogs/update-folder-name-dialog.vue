@@ -15,76 +15,101 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-import { computed, inject, ref, watch } from 'vue';
-import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
-import { Ui3nInput } from '@v1nt1248/3nclient-lib';
+  import { computed, onMounted, ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import {
+    Ui3nDialog,
+    Ui3nInput,
+    type Ui3nDialogComponentProps,
+    type Ui3nDialogEvent,
+  } from '@v1nt1248/3nclient-lib';
 
-const props = defineProps<{
-  name: string;
-}>();
-const emits = defineEmits(['select', 'validate', 'close', 'confirm']);
+  const props = defineProps<{
+    name: string;
+    dialogProps?: Ui3nDialogComponentProps<{ oldName: string; newName: string }>;
+  }>();
 
-const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+  const emits = defineEmits<{
+    (event: 'action', value: { event: Ui3nDialogEvent; data?: { oldName: string; newName: string } }): void;
+  }>();
 
-const inp = ref();
-const data = ref({ oldName: props.name, newName: props.name });
-const isValid = ref(false);
+  const { t } = useI18n();
 
-const isFolderNameValid = computed(() => inp.value?.isDirty && isValid.value);
+  const inp = ref();
+  const inpElement = ref<HTMLInputElement | null>(null);
+  const data = ref({ oldName: props.name, newName: props.name });
+  const isValid = ref(false);
 
-function checkRequired(text?: unknown): boolean | string {
-  return !!text || $tr('validation.text.required');
-}
+  const isFolderNameValid = computed(() => inp.value?.isDirty && isValid.value);
 
-function checkEquality(text?: unknown): boolean | string {
-  return text !== data.value.oldName || $tr('validation.text.equality');
-}
-
-function onValidUpdate(val: boolean) {
-  isValid.value = val;
-}
-
-function updateByKeyboard() {
-  if (data.value.newName && isFolderNameValid.value) {
-    emits('select', data.value);
-    emits('confirm');
+  function checkRequired(text?: unknown): boolean | string {
+    return !!text || t('validation.text.required');
   }
-}
 
-function updateFolderName() {
-  emits('select', data.value);
-}
+  function checkEquality(text?: unknown): boolean | string {
+    return text !== data.value.oldName || t('validation.text.equality');
+  }
 
-watch(
-  () => isFolderNameValid.value,
-  (val) => {
-    emits('validate', val);
-  },
-  { immediate: true },
-);
+  function onValidUpdate(val: boolean) {
+    isValid.value = val;
+  }
+
+  function onAction(val: { event: Ui3nDialogEvent; data?: { oldName: string; newName: string } }) {
+    emits('action', val);
+  }
+
+  function updateByKeyboard() {
+    if (data.value.newName && isFolderNameValid.value) {
+      emits('action', { event: 'confirm', data: data.value });
+    }
+  }
+
+  onMounted(() => {
+    if (inpElement.value) {
+      setTimeout(() => {
+        inpElement.value!.focus();
+      }, 100);
+    }
+  });
 </script>
 
 <template>
-  <div :class="$style.updateFolderName">
-    <ui3n-input
-      ref="inp"
-      v-model="data.newName"
-      :autofocus="true"
-      :rules="[checkRequired, checkEquality]"
-      :placeholder="$tr('update.folder.name.input.placeholder')"
-      @escape="emits('close')"
-      @enter="updateByKeyboard"
-      @update:valid="onValidUpdate"
-      @update:model-value="updateFolderName"
-    />
-  </div>
+  <ui3n-dialog
+    v-bind="dialogProps"
+    :data="data"
+    :is-valid="isFolderNameValid"
+    @action="onAction"
+  >
+    <template #body>
+      <div :class="$style.updateFolderName">
+        <ui3n-input
+          ref="inp"
+          v-model="data.newName"
+          :autofocus="true"
+          :rules="[checkRequired, checkEquality]"
+          :placeholder="t('dialog.rename_folder.field.placeholder.input')"
+          :class="$style.input"
+          @init="inpElement = $event"
+          @escape="emits('action', { event: 'close' })"
+          @enter="updateByKeyboard"
+          @update:valid="onValidUpdate"
+        />
+      </div>
+    </template>
+  </ui3n-dialog>
 </template>
 
 <style lang="scss" module>
-.updateFolderName {
-  position: relative;
-  width: 100%;
-  height: calc(var(--base-size) * 5);
-  padding: var(--spacing-m) var(--spacing-m) 0 var(--spacing-m);
-}
+  .updateFolderName {
+    position: relative;
+    width: 100%;
+    height: calc(var(--base-size) * 5);
+    padding: var(--spacing-m);
+  }
+
+  .input {
+    & > div {
+      top: 35px !important;
+    }
+  }
 </style>

@@ -1,20 +1,19 @@
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
-import { router } from './router';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import {
   dialogs,
-  i18n,
-  I18nOptions,
   notifications,
   storeDialogs,
   storeVueBus,
-  storeI18n,
   storeNotifications,
   vueBus,
 } from '@v1nt1248/3nclient-lib/plugins';
+
 import { piniaRouter } from '@/plugins/pinia-router';
+import i18n from '@/data/i18';
+import { router } from './router';
 
 import App from '@/pages/app.vue';
 
@@ -22,34 +21,28 @@ import '@v1nt1248/3nclient-lib/variables.css';
 import '@v1nt1248/3nclient-lib/style.css';
 import '@/assets/styles/main.css';
 
-import en from './data/i18/en.json';
-
 import { initializationServices } from '@/services/services-provider';
 
-initializationServices().then(() => {
-  const pinia = createPinia();
-  pinia.use(piniaRouter);
-  pinia.use(storeVueBus);
-  pinia.use(storeI18n);
-  pinia.use(storeDialogs);
-  pinia.use(storeNotifications);
+initializationServices()
+  .then(() => {
+    const pinia = createPinia();
+    pinia.use(piniaRouter);
+    pinia.use(storeVueBus);
+    pinia.use(storeDialogs);
+    pinia.use(storeNotifications);
 
-  const app = createApp(App);
+    const app = createApp(App);
 
-  app.config.globalProperties.$router = router;
-  // app.config.globalProperties.$store = store
-  app.config.compilerOptions.isCustomElement = tag => {
-    return tag.startsWith('ui3n-');
-  };
+    app.config.globalProperties.$router = router;
+    // app.config.globalProperties.$store = store
+    app.config.compilerOptions.isCustomElement = tag => {
+      return tag.startsWith('ui3n-');
+    };
 
-  dayjs.extend(relativeTime);
+    dayjs.extend(relativeTime);
 
-  app
-    .use(pinia)
-    .use<I18nOptions>(i18n, { lang: 'en', messages: { en } })
-    .use(vueBus)
-    .use(dialogs)
-    .use(notifications)
-    .use(router)
-    .mount('#main');
-});
+    app.use(pinia).use(i18n).use(vueBus).use(dialogs).use(notifications).use(router).mount('#main');
+  })
+  .catch(err => {
+    console.error('🔥 ERROR CREATE APP. ', err);
+  });

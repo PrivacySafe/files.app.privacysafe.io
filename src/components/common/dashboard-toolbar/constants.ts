@@ -1,4 +1,4 @@
-import type { ListingEntryExtended } from '@/types';
+import type { ListingEntryExtended } from '@shared/types';
 
 export const SORTABLE_FIELDS: Array<{
   field: keyof ListingEntryExtended;
@@ -6,18 +6,18 @@ export const SORTABLE_FIELDS: Array<{
 }> = [
   {
     field: 'name',
-    label: 'table.header.name',
+    label: 'fs.table.header.name',
   },
   {
     field: 'type',
-    label: 'table.header.type',
+    label: 'fs.table.header.type',
   },
   {
     field: 'size',
-    label: 'table.header.size',
+    label: 'fs.table.header.size',
   },
   {
     field: 'displayingCTime',
-    label: 'table.header.date',
+    label: 'fs.table.header.date',
   },
 ];

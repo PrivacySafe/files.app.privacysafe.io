@@ -15,79 +15,147 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import { computed } from 'vue';
+import isEmpty from 'lodash/isEmpty';
+import { type Nullable } from '@v1nt1248/3nclient-lib';
 import { useNavigation } from '@/composables/useNavigation';
 import {
   USER_FS,
   USER_DEVICE_FS,
   END_OF_ROOT_FOLDER_ID,
-  END_OF_TRASH_FOLDER_ID,
   START_OF_SYSTEM_FS_ID,
-} from '@/constants';
+  USER_TRASH_FOLDER,
+  USER_TRASH_LOCAL_FOLDER,
+  USER_LOCAL_FS,
+} from '@shared/constants';
+import type { ListingEntryExtended } from '@shared/types';
 
 export function useAbilities() {
-  const { isSplittedMode, activeWindow, window1FsId, window1RootFolderId, window2FsId, window2RootFolderId } =
-    useNavigation();
+  const { isSplittedMode, activeWindow, window1RootFolderId, window2RootFolderId } = useNavigation();
 
   const canCreateFolder = computed(() => {
     if ((isSplittedMode.value && activeWindow.value === '1') || !isSplittedMode.value) {
-      return (
-        (window1FsId.value === USER_FS && window1RootFolderId.value.includes(END_OF_ROOT_FOLDER_ID)) ||
-        window1FsId.value === USER_DEVICE_FS
-      );
+      if ([USER_TRASH_FOLDER, USER_TRASH_LOCAL_FOLDER].includes(window1RootFolderId.value)) {
+        return false;
+      }
+
+      return [`${USER_FS}-root`, `${USER_LOCAL_FS}-root`, `${USER_DEVICE_FS}-root`].includes(window1RootFolderId.value);
+    }
+
+    if ([USER_TRASH_FOLDER, USER_TRASH_LOCAL_FOLDER].includes(window2RootFolderId.value!)) {
+      return false;
+    }
+
+    return [`${USER_FS}-root`, `${USER_LOCAL_FS}-root`, `${USER_DEVICE_FS}-root`].includes(window2RootFolderId.value!);
+  });
+
+  function canSetUnsetFavorite(currentFsId: Nullable<string>, currentRootFolderId: string): boolean {
+    if (!currentFsId || [USER_TRASH_FOLDER, USER_TRASH_LOCAL_FOLDER].includes(currentRootFolderId)) {
+      return false;
     }
 
     return (
-      (window2FsId.value === USER_FS && window2RootFolderId.value?.includes(END_OF_ROOT_FOLDER_ID)) ||
-      window2FsId.value === USER_DEVICE_FS
+      [USER_FS, USER_LOCAL_FS, USER_DEVICE_FS].includes(currentFsId) &&
+      currentRootFolderId.includes(END_OF_ROOT_FOLDER_ID)
     );
-  });
+  }
 
-  function canSetUnsetFavorite(currentFsId: string, currentRootFolderId: string): boolean {
+  function canDownload(selectedEntities: ListingEntryExtended[]): boolean {
+    return !selectedEntities.some(entity => entity.brokeReason);
+  }
+
+  function canRestore({
+    currentFsId,
+    currentRootFolderId,
+    currentFolderPath,
+    selectedEntities,
+  }: {
+    currentFsId: Nullable<string>;
+    currentRootFolderId: string;
+    currentFolderPath?: string;
+    selectedEntities: ListingEntryExtended[];
+  }): boolean {
+    if (!currentFsId) {
+      return false;
+    }
+
     return (
-      (currentFsId === USER_FS && currentRootFolderId.includes(END_OF_ROOT_FOLDER_ID)) || currentFsId === USER_DEVICE_FS
+      [USER_TRASH_FOLDER, USER_TRASH_LOCAL_FOLDER].includes(currentRootFolderId) &&
+      !currentFolderPath &&
+      !selectedEntities.some(entity => entity.brokeReason)
     );
   }
 
-  function canRestore(currentFsId: string, currentRootFolderId: string, currentFolderPath?: string): boolean {
-    return currentFsId === USER_FS && currentRootFolderId.includes(END_OF_TRASH_FOLDER_ID) && !currentFolderPath;
+  function canDelete(currentFsId: Nullable<string>, currentRootFolderId: string): boolean {
+    if (!currentFsId) {
+      return false;
+    }
+
+    return (
+      [USER_FS, USER_LOCAL_FS, USER_DEVICE_FS].includes(currentFsId) &&
+      ![USER_TRASH_FOLDER, USER_TRASH_LOCAL_FOLDER].includes(currentRootFolderId)
+    );
   }
 
-  function canDelete(currentFsId: string, currentRootFolderId: string): boolean {
-    return currentFsId === USER_FS && !currentRootFolderId.includes(END_OF_TRASH_FOLDER_ID);
-  }
+  function canDeleteCompletely(
+    currentFsId: Nullable<string>,
+    currentRootFolderId: string,
+    currentFolderPath?: string,
+  ): boolean {
+    if (!currentFsId) {
+      return false;
+    }
 
-  function canDeleteCompletely(currentFsId: string, currentRootFolderId: string, currentFolderPath?: string): boolean {
-    return currentFsId === USER_FS && currentRootFolderId.includes(END_OF_TRASH_FOLDER_ID)
+    return [USER_TRASH_FOLDER, USER_TRASH_LOCAL_FOLDER].includes(currentRootFolderId)
       ? !currentFolderPath
       : !currentFsId.includes(START_OF_SYSTEM_FS_ID);
   }
 
-  function canUpload(currentFsId: string, currentRootFolderId: string): boolean {
+  function canUpload(currentFsId: Nullable<string>, currentRootFolderId: string): boolean {
+    if (!currentFsId || [USER_TRASH_FOLDER, USER_TRASH_LOCAL_FOLDER].includes(currentRootFolderId)) {
+      return false;
+    }
+
     return (
-      (currentFsId === USER_FS && currentRootFolderId.includes(END_OF_ROOT_FOLDER_ID)) || currentFsId === USER_DEVICE_FS
+      [USER_FS, USER_LOCAL_FS, USER_DEVICE_FS].includes(currentFsId) &&
+      currentRootFolderId.includes(END_OF_ROOT_FOLDER_ID)
     );
   }
 
-  function canRename(currentFsId: string, currentRootFolderId: string): boolean {
+  function canRename(currentFsId: Nullable<string>, currentRootFolderId: string): boolean {
+    if (!currentFsId || [USER_TRASH_FOLDER, USER_TRASH_LOCAL_FOLDER].includes(currentRootFolderId)) {
+      return false;
+    }
+
     return (
-      (currentFsId === USER_FS && currentRootFolderId.includes(END_OF_ROOT_FOLDER_ID)) || currentFsId === USER_DEVICE_FS
+      [USER_FS, USER_LOCAL_FS, USER_DEVICE_FS].includes(currentFsId) &&
+      currentRootFolderId.includes(END_OF_ROOT_FOLDER_ID)
     );
   }
 
   function canCopyMove(currentRootFolderId: string): boolean {
-    return !currentRootFolderId.includes(END_OF_TRASH_FOLDER_ID);
+    return ![USER_TRASH_FOLDER, USER_TRASH_LOCAL_FOLDER].includes(currentRootFolderId);
   }
 
-  function canDrop(currentFsId: string, currentRootFolderId: string): boolean {
-    return (
-      (currentFsId === USER_FS || currentFsId === USER_DEVICE_FS) &&
-      !currentRootFolderId.includes(END_OF_TRASH_FOLDER_ID)
-    );
+  function canDrop(currentFsId: Nullable<string>, currentRootFolderId: string): boolean {
+    if (!currentFsId || [USER_TRASH_FOLDER, USER_TRASH_LOCAL_FOLDER].includes(currentRootFolderId)) {
+      return false;
+    }
+
+    return [USER_FS, USER_LOCAL_FS, USER_DEVICE_FS].includes(currentFsId);
+  }
+
+  function canResolve(currentFsId: Nullable<string>, selectedEntities: ListingEntryExtended[]): boolean {
+    if (!currentFsId || currentFsId !== USER_FS || isEmpty(selectedEntities)) {
+      return false;
+    }
+
+    return !selectedEntities.some(entity => entity.sync !== 'conflicting');
   }
 
   return {
     canCreateFolder,
     canSetUnsetFavorite,
+    canDownload,
     canRestore,
     canDelete,
     canDeleteCompletely,
@@ -95,5 +163,6 @@ export function useAbilities() {
     canRename,
     canCopyMove,
     canDrop,
+    canResolve,
   };
 }

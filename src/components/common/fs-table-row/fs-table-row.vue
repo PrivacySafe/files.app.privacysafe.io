@@ -15,52 +15,74 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script setup lang="ts">
-  import { computed, ref } from 'vue';
+  import { computed, inject, nextTick, ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import { storeToRefs } from 'pinia';
   import get from 'lodash/get';
   import size from 'lodash/size';
   import { type Nullable, Ui3nEditable, Ui3nIcon } from '@v1nt1248/3nclient-lib';
   import { getFileExtension, formatFileSize } from '@v1nt1248/3nclient-lib/utils';
   import { useDblClickHandler } from '@/composables/useDblClickHandler';
   import { useAbilities } from '@/composables/useAbilities';
-  import { useFsEntryStore } from '@/store';
-  import type { ListingEntryExtended } from '@/types';
-  import { FsTableRowProps, FsTableRowEmits } from './types';
+  import { useAppStore, useFsStore, useSyncQueueStore } from '@/store';
+  import type { FsEntityInfoProvideProps, ListingEntryExtended } from '@shared/types';
+  import type { FsTableRowProps, FsTableRowEmits } from './types';
   import FileType from '@/components/common/file-type/file-type.vue';
+  import FsEntitySyncStatus from '@/components/common/fs-entity-sync-status/fs-entity-sync-status.vue';
 
   const props = defineProps<FsTableRowProps<keyof ListingEntryExtended>>();
   const emits = defineEmits<FsTableRowEmits>();
 
+  const { t } = useI18n();
+
   const { handleDblClick } = useDblClickHandler(onClick, onDblClick);
 
   const editNameMode = ref<boolean>(false);
+
+  const { canRename, canSetUnsetFavorite, canCopyMove } = useAbilities();
+
+  const { displayedFsEntityInfo, openFsEntityInfoBlock } = inject<FsEntityInfoProvideProps>('fsEntityInfo')!;
+
+  const appStore = useAppStore();
+  const { uploadProcesses, downloadProcesses, adoptProcesses } = storeToRefs(useSyncQueueStore());
+
+  const isRowFromSyncedFsTable = computed(() => props.rootFolderId.includes('synced'));
+  const isFsEntryInProcessing = computed(() => uploadProcesses.value.has(props.row.fullPath) || downloadProcesses.value.has(props.row.fullPath) || adoptProcesses.value.has(props.row.fullPath));
 
   const fileExtension = computed(() => {
     if (props.row.type !== 'file') {
       return '';
     }
 
-    const value = getFileExtension(props.row.name).toLowerCase();
+    const value = props.row.ext || getFileExtension(props.row.name).toLowerCase();
     return size(value) > 5 ? '' : value;
   });
 
-  const { canRename, canSetUnsetFavorite, canCopyMove } = useAbilities();
+  const isAvailableFavoriteActions = computed(() => props.row.type === 'folder' && !props.disabled && canSetUnsetFavorite(props.fsId, props.rootFolderId));
 
-  const { openFile } = useFsEntryStore();
+  const { openFile } = useFsStore();
 
   async function onDblClick() {
+    if (props.row.brokeReason) {
+      return;
+    }
+
     switch (props.row.type) {
       case 'folder': {
         emits('action', { event: 'go', payload: props.row.fullPath });
         return;
       }
+
       case 'file': {
         await openFile(props.fsId, props.row.fullPath);
         return;
       }
+
       case 'link': {
-        if (props.row.isFile) {
+        // TODO How can I correctly determine that a link is a link to a file?
+        if (props.row.ext) {
           await openFile(props.fsId, props.row.fullPath, true);
-        } else if (props.row.isFolder) {
+        } else {
           emits('action', { event: 'go:linked-folder', payload: props.row.fullPath });
         }
         return;
@@ -71,6 +93,10 @@
   function onClick(ev: MouseEvent) {
     ev.preventDefault();
     ev.stopImmediatePropagation();
+    if (props.row.brokeReason) {
+      return;
+    }
+
     emits('action', { event: 'open:info', payload: { row: props.row } });
   }
 
@@ -81,6 +107,8 @@
     } else {
       props.events?.select(props.row);
     }
+
+    nextTick(() => openFsEntityInfoBlock(null));
   }
 
   function getFieldStyle(field: keyof ListingEntryExtended): Record<string, string> {
@@ -105,7 +133,9 @@
   <div
     :class="[
       $style.fsTableRow,
-      (disabled || readonly) && $style.fsTableRowDisabled,
+      !!row.brokeReason && $style.damaged,
+      displayedFsEntityInfo?.fsId === fsId && displayedFsEntityInfo?.path === row.fullPath && $style.highlight,
+      (disabled || readonly || (isFsEntryInProcessing && appStore.connectivityStatus === 'online')) && $style.fsTableRowDisabled,
       isDroppable && $style.droppable
     ]"
     :draggable="!editNameMode && canCopyMove(rootFolderId)"
@@ -122,8 +152,7 @@
         <ui3n-icon
           v-if="isRowSelected"
           icon="round-check-box"
-          :width="20"
-          :height="20"
+          :size="20"
           color="var(--color-icon-control-accent-default)"
         />
 
@@ -140,16 +169,14 @@
             <ui3n-icon
               :class="$style.iconCheck"
               icon="round-check-box-outline-blank"
-              :width="20"
-              :height="20"
+              :size="20"
               color="var(--color-icon-control-accent-default)"
             />
 
             <ui3n-icon
               :class="$style.iconType"
               :icon="row.type === 'folder' ? 'round-folder' : 'round-subject'"
-              :width="20"
-              :height="20"
+              :size="20"
               color="var(--color-icon-table-secondary-default)"
             />
           </template>
@@ -159,9 +186,17 @@
       <ui3n-editable
         :model-value="row.name"
         disallow-empty-value
-        :disabled="!canRename(fsId, rootFolderId) || disabled || readonly"
+        :disabled="!canRename(fsId, rootFolderId) || disabled || readonly || !!row.brokeReason"
         @toggle:edit-mode="editNameMode = $event"
         @update:model-value="updateName"
+      />
+
+      <ui3n-icon
+        v-if="row.brokeReason"
+        icon="round-crisis-alert"
+        color="var(--error-content-default)"
+        :title="`${t('app.damaged')}. ${t('app.damaged_reason')}: ${row.brokeReason}`"
+        :class="$style.iconDamaged"
       />
     </div>
 
@@ -185,6 +220,20 @@
     </div>
 
     <div
+      v-if="isRowFromSyncedFsTable"
+      :class="$style.sync"
+      :style="getFieldStyle('sync')"
+    >
+      <fs-entity-sync-status
+        :lock-changes="isLoadingData"
+        :task-runner="taskRunner"
+        :fs-id="fsId"
+        :row="row"
+        @refresh-data="emits('action', { event: 'refresh:data' })"
+      />
+    </div>
+
+    <div
       :class="$style.date"
       :style="getFieldStyle('displayingCTime')"
     >
@@ -192,13 +241,20 @@
     </div>
 
     <ui3n-icon
-      v-if="row.type === 'folder' && !disabled && canSetUnsetFavorite(fsId, rootFolderId)"
+      v-if="isAvailableFavoriteActions && !isFsEntryInProcessing && !row.brokeReason"
       icon="round-bookmark"
-      width="12"
-      height="12"
+      size="12"
       :color="row.favoriteId ? 'var(--color-icon-table-accent-selected)' : 'var(--color-icon-table-accent-unselected)'"
       :class="[$style.favoriteIcon, row.favoriteId && $style.favoriteIconSelected]"
       @click.stop="updateFavorite"
+    />
+
+    <ui3n-icon
+      v-if="isFsEntryInProcessing && appStore.connectivityStatus === 'online'"
+      icon="round-lock"
+      size="12"
+      color="var(--color-icon-control-warning-default)"
+      :class="[$style.favoriteIcon, $style.favoriteIconSelected]"
     />
   </div>
 </template>
@@ -239,6 +295,10 @@
           color: var(--color-icon-table-accent-hover) !important;
         }
       }
+    }
+
+    &.highlight {
+      background-color: var(--ui3n-table-row-bg-color-selected);
     }
   }
 
@@ -293,6 +353,13 @@
   .iconType {
     position: relative;
   }
+
+  .iconDamaged {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+  }
+
 
   .type {
     display: flex;

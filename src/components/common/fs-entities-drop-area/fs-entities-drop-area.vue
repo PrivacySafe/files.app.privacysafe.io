@@ -5,6 +5,7 @@
   const props = defineProps<{
     path: string;
     droppableEntity: Nullable<string>;
+    disabled?: boolean;
   }>();
   const emits = defineEmits<{
     (event: 'dragend'): void;
@@ -21,6 +22,7 @@
   <div
     :class="[
       $style.fsEntitiesDropArea,
+      disabled && $style.disabled,
       droppableEntity && droppableEntity === pathValue && $style.fsEntitiesDropAreaShow,
     ]"
     @dragend="emits('dragend')"
@@ -49,6 +51,12 @@
     opacity: 0;
     transition: all 0.2s ease-in-out;
     background-color: transparent;
+
+    &.disabled {
+      pointer-events: none;
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
   }
 
   .fsEntitiesDropAreaShow {

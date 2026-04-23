@@ -15,40 +15,33 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-  import { computed, type ComputedRef, inject, ref, watch } from 'vue';
+  import { computed, inject, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { storeToRefs } from 'pinia';
   import isEmpty from 'lodash/isEmpty';
   import size from 'lodash/size';
   import debounce from 'lodash/debounce';
-  import { I18N_KEY, I18nPlugin, VUEBUS_KEY, VueBusPlugin } from '@v1nt1248/3nclient-lib/plugins';
+  import { VUEBUS_KEY, VueBusPlugin } from '@v1nt1248/3nclient-lib/plugins';
   import { Ui3nIcon, Ui3nResize, Ui3nRipple, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
   import type { Nullable } from '@v1nt1248/3nclient-lib';
   import { useNavigation } from '@/composables/useNavigation';
-  import { useFsStore, useRunModeInfoStore } from '@/store';
-  import type { AppGlobalEvents, RootFsFolderView } from '@/types';
+  import { useFsStore } from '@/store';
+  import type { AppGlobalEvents } from '@shared/types';
 
   const vUi3nResize = Ui3nResize;
   const vUi3nRipple = Ui3nRipple;
 
   const props = defineProps<{
-    currentFsId: string;
+    currentFsFolder: string;
     path: string;
   }>();
 
   const bus = inject<VueBusPlugin<AppGlobalEvents>>(VUEBUS_KEY)!;
-  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+  const { t } = useI18n();
 
-  const {
-    isSplittedMode,
-    activeWindow,
-    window1RootFolderId,
-    window2RootFolderId,
-    navigateToRouteSingle,
-    navigateToRouteDouble,
-  } = useNavigation();
+  const { isSplittedMode, activeWindow, navigateToRouteSingle, navigateToRouteDouble } = useNavigation();
 
   const { fsFolderList } = storeToRefs(useFsStore());
-  const { currentRootFsFolder } = storeToRefs(useRunModeInfoStore());
 
   const wrapElement = ref<Nullable<HTMLDivElement>>(null);
   const pathElement = ref<Nullable<HTMLDivElement>>(null);
@@ -58,18 +51,16 @@
   const currentChildIndex = ref(0);
   const pathOffsetX = ref(0);
 
-  const rootFolder = computed(() => {
-    const rootFolderId = isSplittedMode.value
-      ? activeWindow.value === '1' ? window1RootFolderId.value : window2RootFolderId.value
-      : window1RootFolderId.value;
-
-    return fsFolderList.value.find(f => f.fsId === props.currentFsId && f.id === rootFolderId);
-  }) as ComputedRef<RootFsFolderView>;
+  const rootFolder = computed(() => fsFolderList.value.find(f => f.id === props.currentFsFolder));
 
   const rootFolderName = computed(() => {
-    if (!rootFolder.value) return '';
+    if (!rootFolder.value) {
+      return '';
+    }
 
-    if (rootFolder.value.name.includes('.')) return $tr(rootFolder.value.name);
+    if (rootFolder.value.name.includes('.')) {
+      return t(rootFolder.value.name);
+    }
 
     const splittedFolderName = (rootFolder.value.name || '').split('(');
     return splittedFolderName[0].trim() || 'Root';
@@ -135,12 +126,10 @@
       return navigateToRouteDouble({
         params: {
           ...(activeWindow.value === '1' && {
-            fsId: props.currentFsId,
-            folderId: currentRootFsFolder.value,
+            rootFolderId: props.currentFsFolder,
           }),
           ...(activeWindow.value === '2' && {
-            fs2Id: props.currentFsId,
-            folder2Id: currentRootFsFolder.value,
+            rootFolder2Id: props.currentFsFolder,
           }),
         },
         query: {
@@ -151,7 +140,7 @@
     }
 
     return navigateToRouteSingle({
-      params: { fsId: props.currentFsId, folderId: currentRootFsFolder.value },
+      params: { rootFolderId: props.currentFsFolder },
       query: { path },
     });
   }
@@ -212,7 +201,7 @@
       @click.stop.prevent="shiftRight"
     >
       <ui3n-tooltip
-        :content="$tr('dashboard.toolbar.shift.path.right')"
+        :content="t('dashboard.toolbar.action.shift_path_right')"
         placement="top"
         position-strategy="fixed"
       >
@@ -231,7 +220,7 @@
       @click.stop.prevent="shiftLeft"
     >
       <ui3n-tooltip
-        :content="$tr('dashboard.toolbar.shift.path.left')"
+        :content="t('dashboard.toolbar.action.shift_path_left')"
         placement="top"
         position-strategy="fixed"
       >

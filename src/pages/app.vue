@@ -15,13 +15,16 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-  import { Ui3nMenu, Ui3nResize, Ui3nRipple, Ui3nProgressCircular } from '@v1nt1248/3nclient-lib';
+  import { useI18n } from 'vue-i18n';
+  import { Ui3nDialogProvider, Ui3nButton, Ui3nIcon, Ui3nMenu, Ui3nResize, Ui3nRipple, Ui3nProgressCircular, Ui3nProgressLinear } from '@v1nt1248/3nclient-lib';
   import prLogo from '@/assets/images/privacysafe-logo-new.svg';
   import { useAppView } from '@/composables/useAppView';
   import ContactIcon from '@/components/contacts/contact-icon.vue';
 
   const vUi3nResize = Ui3nResize;
   const vUi3nRipple = Ui3nRipple;
+
+  const { t } = useI18n();
 
   const {
     appElement,
@@ -30,7 +33,9 @@
     connectivityStatusText,
     customLogoSrc,
     commonLoading,
+    isFillingUpSyncQueue,
     onResize,
+    openAppSettings,
     appExit,
   } = useAppView();
 
@@ -57,7 +62,7 @@
           /
         </div>
         <div :class="$style.info">
-          {{ $tr('app.title') }}
+          {{ t('app.title') }}
           <div :class="$style.version">
             v {{ appVersion }}
           </div>
@@ -70,39 +75,67 @@
             {{ me }}
           </span>
           <span :class="$style.connection">
-            {{ $tr('app.status') }}:
-            <span :class="connectivityStatusText === 'app.status.connected.online' && $style.connectivity">
-              {{ $tr(connectivityStatusText) }}
+            {{ t('app.status.label') }}:
+            <span :class="connectivityStatusText === 'app.status.online' && $style.connectivity">
+              {{ t(connectivityStatusText) }}
             </span>
           </span>
+        </div>
+
+        <div
+          v-ui3n-ripple
+          :class="$style.icon"
+        >
+          <contact-icon
+            :name="me || ''"
+            :size="36"
+            :readonly="true"
+          />
         </div>
 
         <ui3n-menu
           position-strategy="fixed"
           :offset-y="4"
         >
-          <div
-            v-ui3n-ripple
-            :class="$style.icon"
-          >
-            <contact-icon
-              :name="me || ''"
-              :size="36"
-              :readonly="true"
-            />
-          </div>
+          <ui3n-button
+            type="icon"
+            color="var(--color-bg-block-primary-default)"
+            icon="round-more-vert"
+            icon-size="24"
+            icon-color="var(--color-icon-control-secondary-default)"
+            :class="$style.menuBtn"
+          />
 
           <template #menu>
             <div :class="$style.menu">
               <div
                 :class="$style.menuItem"
+                @click="openAppSettings"
+              >
+                <ui3n-icon icon="outline-settings" />
+                {{ t('app.settings.title') }}
+              </div>
+
+              <div
+                :class="$style.menuItem"
                 @click="appExit"
               >
-                {{ $tr('app.exit') }}
+                <ui3n-icon icon="round-logout" />
+                {{ t('app.exit') }}
               </div>
             </div>
           </template>
         </ui3n-menu>
+      </div>
+
+      <div
+        v-if="isFillingUpSyncQueue"
+        :class="$style.syncInfo"
+      >
+        <div :class="$style.syncInfoText">
+          {{ t('app.sync.start') }}
+        </div>
+        <ui3n-progress-linear indeterminate />
       </div>
     </div>
 
@@ -125,6 +158,8 @@
     </div>
 
     <div id="notification" />
+
+    <ui3n-dialog-provider />
   </div>
 </template>
 
@@ -191,6 +226,21 @@
     display: flex;
     justify-content: flex-end;
     align-items: center;
+    column-gap: var(--spacing-s);
+
+    button {
+      min-width: 36px !important;
+      width: 36px !important;
+      height: 36px;
+    }
+  }
+
+  .menuBtn {
+    &:hover {
+      div {
+        color: var(--color-text-control-accent-default);
+      }
+    }
   }
 
   .userInfo {
@@ -198,7 +248,6 @@
     flex-direction: column;
     justify-content: center;
     align-items: flex-end;
-    margin-right: var(--spacing-m);
 
     span:not(.connectivity) {
       color: var(--color-text-control-primary-default);
@@ -229,6 +278,7 @@
 
   .menu {
     position: relative;
+    padding: 2px 0;
     background-color: var(--color-bg-control-secondary-default);
     width: max-content;
     border-radius: var(--spacing-xs);
@@ -237,20 +287,25 @@
 
   .menuItem {
     position: relative;
-    width: 60px;
+    width: 100px;
     height: var(--spacing-l);
     padding: 0 var(--spacing-s);
-    font-size: var(--font-13);
+    font-size: var(--font-14);
     font-weight: 500;
     color: var(--color-text-control-primary-default);
     display: flex;
     justify-content: flex-start;
     align-items: center;
+    column-gap: var(--spacing-xs);
     cursor: pointer;
 
     &:hover {
       background-color: var(--color-bg-control-primary-hover);
       color: var(--color-text-control-accent-default);
+
+      div {
+        color: var(--color-text-control-accent-default);
+      }
     }
   }
 
@@ -271,6 +326,23 @@
     justify-content: center;
     align-items: center;
     pointer-events: none;
+  }
+
+  .syncInfo {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    bottom: 0;
+
+    .syncInfoText {
+      position: relative;
+      width: 100%;
+      text-align: center;
+      margin-bottom: var(--spacing-xs);
+      font-size: var(--font-13);
+      font-weight: 500;
+      color: var(--color-text-control-accent-default);
+    }
   }
 
   #notification {

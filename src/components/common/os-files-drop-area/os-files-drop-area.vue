@@ -1,22 +1,25 @@
 <script lang="ts" setup>
   import { inject } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { VUEBUS_KEY, VueBusPlugin } from '@v1nt1248/3nclient-lib/plugins';
   import { Ui3nDropFiles, Ui3nInputFile } from '@v1nt1248/3nclient-lib';
-  import type { AppGlobalEvents } from '@/types';
-  import { useFsEntryStore } from '@/store';
+  import type { AppGlobalEvents } from '@shared/types';
+  import { useFsStore } from '@/store';
 
   const props = defineProps<{
     fsId: string;
     path: string;
     isEmptyFolderMode?: boolean;
+    disabled?: boolean;
   }>();
   const emits = defineEmits<{
     (event: 'loading', value: boolean): void;
   }>();
 
+  const { t } = useI18n();
   const bus = inject<VueBusPlugin<AppGlobalEvents>>(VUEBUS_KEY)!;
 
-  const { saveFileBaseOnOsFileSystemFile } = useFsEntryStore();
+  const { saveFileBaseOnOsFileSystemFile } = useFsStore();
 
   async function onFilesSelect(value: File[] | FileList) {
     try {
@@ -38,7 +41,7 @@
 </script>
 
 <template>
-  <div :class="$style.osFilesDropArea">
+  <div :class="[$style.osFilesDropArea, disabled && $style.disabled]">
     <ui3n-drop-files
       :class="!isEmptyFolderMode && $style.withoutIcon"
       title=""
@@ -50,10 +53,12 @@
         #additional-text
       >
         <div :class="$style.noDataText">
-          <span>{{ $tr('table.folder.empty.text') }}</span>&nbsp;
+          <span>{{ t('fs.table.folder.empty_text') }}</span>
+          &nbsp;
           <ui3n-input-file
             multiple
-            :button-text="$tr('app.upload.file.text')"
+            :button-text="t('app.upload_file')"
+            :disabled="disabled"
             @update:model-value="onFilesSelect"
           />
         </div>
@@ -65,10 +70,16 @@
 <style lang="scss" module>
   .osFilesDropArea {
     position: absolute;
-    inset: 0;
+    inset: 2px;
     display: flex;
     justify-content: center;
     align-items: center;
+
+    &.disabled {
+      pointer-events: none;
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
   }
 
   .withoutIcon {

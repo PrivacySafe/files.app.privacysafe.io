@@ -15,25 +15,28 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
+  import { computed } from 'vue';
   import TableView from '@/components/common/table-view/table-view.vue';
   import TileView from '@/components/common/tile-view/tile-view.vue';
 
-  defineProps<{
-    window: 1 | 2;
+  const props = defineProps<{
+    windowIndex?: 1 | 2;
     tileView?: boolean;
   }>();
+
+  const currentWindowIndex = computed(() => (!props.windowIndex || props.windowIndex === 1 ? 1 : 2));
 </script>
 
 <template>
   <div :class="$style.fsFolder">
     <tile-view
       v-if="tileView"
-      :window="window"
+      :window-index="currentWindowIndex"
     />
 
     <table-view
       v-else
-      :window="window"
+      :window-index="currentWindowIndex"
     />
   </div>
 </template>

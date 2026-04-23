@@ -15,38 +15,53 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
+  import { computed } from 'vue';
   import { storeToRefs } from 'pinia';
+  import size from 'lodash/size';
   import { Ui3nButton, Ui3nIcon, Ui3nMenu } from '@v1nt1248/3nclient-lib';
   import { useNavigation } from '@/composables/useNavigation';
   import { useFsWindowState } from '@/composables/useFsWindowState';
   import { useDashboard } from '@/composables/useDashboard';
   import { useAbilities } from '@/composables/useAbilities';
-  import { useRunModeInfoStore } from '@/store';
+  import { useRunModeInfoStore, useSyncQueueStore } from '@/store';
   import FolderListItem from '@/components/pages/dashboard/folder-list-item/folder-list-item.vue';
   import FavoriteListItem from '@/components/pages/dashboard/favorite-list-item/favorite-list-item.vue';
   import DashboardToolbar from '@/components/common/dashboard-toolbar/dashboard-toolbar.vue';
+  import FsEntityInfo from '@/components/common/fs-entity-info/fs-entity-info.vue';
+  import RootConflictBanner from '@/components/pages/dashboard/root-conflict-banner.vue';
 
   const { isSplittedMode, isTileView, activeWindow } = useNavigation();
 
   const { currentWindowFsId, currentWindowRootFolderId } = useFsWindowState(activeWindow);
 
   const {
-    areSystemFoldersShowing,
-    userSyncedFsFolders,
+    t,
+    userFsFolders,
     userDeviceFsFolders,
     systemFsFolders,
     processedFavoriteFolders,
+    displayedFsEntityInfo,
     isFolderSelected,
     selectFolder,
     createFolder,
     uploadFile,
     goToFavoriteFolder,
+    openFsEntityInfoBlock,
   } = useDashboard();
 
   const { canCreateFolder, canUpload } = useAbilities();
 
   const runModeInfoStore = useRunModeInfoStore();
   const { isDragging, isMoveMode, isMoveModeQuick } = storeToRefs(runModeInfoStore);
+  const { rootFolderSyncStatus, trashFolderSyncStatus } = storeToRefs(useSyncQueueStore());
+
+  const showResolveConflictBanner = computed(
+    () =>
+      (rootFolderSyncStatus.value?.state === 'conflicting' &&
+        currentWindowRootFolderId.value === 'user-synced-root') ||
+      (trashFolderSyncStatus.value?.state === 'conflicting' &&
+        currentWindowRootFolderId.value === 'user-synced-trash'),
+  );
 </script>
 
 <template>
@@ -64,7 +79,7 @@
             icon-position="right"
             :disabled="!canCreateFolder"
           >
-            {{ $tr('app.create') }}
+            {{ t('app.create') }}
           </ui3n-button>
 
           <template #menu>
@@ -79,7 +94,7 @@
                   :height="16"
                   color="var(--color-icon-control-primary-default)"
                 />
-                {{ $tr('app.create.folder.text') }}
+                {{ t('app.create_folder') }}
               </div>
 
               <div
@@ -93,27 +108,16 @@
                   :height="16"
                   color="var(--color-icon-control-primary-default)"
                 />
-                {{ $tr('app.upload.file.text') }}
+                {{ t('app.upload_file') }}
               </div>
             </div>
           </template>
         </ui3n-menu>
       </div>
 
-      <template
-        v-for="folder in userSyncedFsFolders"
-        :key="folder.id"
-      >
-        <folder-list-item
-          :folder="folder"
-          :is-selected="isFolderSelected(folder)"
-          @select="selectFolder"
-        />
-      </template>
-
-      <div :class="$style.listBlock">
+      <div :class="$style.listBody">
         <template
-          v-for="folder in userDeviceFsFolders"
+          v-for="folder in userFsFolders"
           :key="folder.id"
         >
           <folder-list-item
@@ -122,42 +126,58 @@
             @select="selectFolder"
           />
         </template>
-      </div>
 
-      <div
-        v-if="areSystemFoldersShowing"
-        :class="$style.listBlock"
-      >
-        <template
-          v-for="folder in systemFsFolders"
-          :key="folder.id"
+        <div
+          v-if="size(userDeviceFsFolders)"
+          :class="$style.listBlock"
         >
-          <folder-list-item
-            :folder="folder"
-            :is-selected="isFolderSelected(folder)"
-            @select="selectFolder"
-          />
-        </template>
-      </div>
-
-      <div :class="$style.favorites">
-        <div :class="$style.favoritesTitle">
-          <span>{{ $tr('app.favorites.title') }}</span>
-          <ui3n-icon
-            icon="round-bookmark"
-            :width="16"
-            :height="16"
-            color="var(--color-icon-control-secondary-default)"
-          />
+          <template
+            v-for="folder in userDeviceFsFolders"
+            :key="folder.id"
+          >
+            <folder-list-item
+              :folder="folder"
+              :is-selected="isFolderSelected(folder)"
+              @select="selectFolder"
+            />
+          </template>
         </div>
 
-        <div :class="$style.favoritesContent">
-          <favorite-list-item
-            v-for="item in processedFavoriteFolders"
-            :key="item.id"
-            :item="item"
-            @go="goToFavoriteFolder"
-          />
+        <div
+          v-if="size(systemFsFolders)"
+          :class="$style.listBlock"
+        >
+          <template
+            v-for="folder in systemFsFolders"
+            :key="folder.id"
+          >
+            <folder-list-item
+              :folder="folder"
+              :is-selected="isFolderSelected(folder)"
+              @select="selectFolder"
+            />
+          </template>
+        </div>
+
+        <div :class="$style.favorites">
+          <div :class="$style.favoritesTitle">
+            <span>{{ t('app.favorites_title') }}</span>
+            <ui3n-icon
+              icon="round-bookmark"
+              :width="16"
+              :height="16"
+              color="var(--color-icon-control-secondary-default)"
+            />
+          </div>
+
+          <div :class="$style.favoritesContent">
+            <favorite-list-item
+              v-for="item in processedFavoriteFolders"
+              :key="item.id"
+              :item="item"
+              @go="goToFavoriteFolder"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -167,13 +187,28 @@
         <dashboard-toolbar />
       </div>
 
-      <div :class="[$style.content, isSplittedMode && $style.splittedContent]">
+      <div
+        :class="[
+          $style.content,
+          isSplittedMode && $style.splittedContent,
+          showResolveConflictBanner && $style.withBanner,
+        ]"
+      >
+        <div
+          v-if="showResolveConflictBanner"
+          :class="$style.rootConflictBanner"
+        >
+          <root-conflict-banner
+            :folder-type="currentWindowRootFolderId === 'user-synced-root' ? 'root' : 'trash'"
+          />
+        </div>
+
         <div :class="[$style.first, isSplittedMode && $style.double]">
           <router-view v-slot="{ Component }">
             <component
               :is="Component"
               v-if="Component"
-              :window="1"
+              :window-index="1"
               :tile-view="isTileView"
             />
           </router-view>
@@ -190,11 +225,31 @@
             <component
               :is="Component"
               v-if="Component"
-              :window="2"
+              :window-index="2"
               :tile-view="isTileView"
             />
           </router-view>
         </div>
+
+        <transition
+          name="fade"
+          mode="in-out"
+        >
+          <div
+            v-if="displayedFsEntityInfo"
+            :class="[
+              $style.info,
+              displayedFsEntityInfo.window === '2' && $style.left,
+              isSplittedMode && $style.splitMode,
+            ]"
+          >
+            <fs-entity-info
+              :fs-id="displayedFsEntityInfo.fsId"
+              :path="displayedFsEntityInfo.path"
+              @close="() => openFsEntityInfoBlock(null)"
+            />
+          </div>
+        </transition>
       </div>
     </div>
 
@@ -207,7 +262,7 @@
         color="var(--color-icon-table-accent-default)"
       />
 
-      {{ (isMoveMode || isMoveModeQuick) ? $tr('fs.entity.action.moving') : $tr('fs.entity.action.copying') }}
+      {{ isMoveMode || isMoveModeQuick ? t('fs.action.moving') : t('fs.action.copying') }}
     </div>
 
     <div
@@ -243,7 +298,7 @@
     position: relative;
     width: var(--dashboard-list-width);
     border-right: 1px solid var(--color-border-block-primary-default);
-    padding: var(--spacing-s);
+    padding: var(--spacing-s) var(--spacing-xs) var(--spacing-s) var(--spacing-s);
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
@@ -286,6 +341,14 @@
     position: relative;
     width: 100%;
     padding: var(--spacing-s) var(--spacing-s) var(--spacing-m) var(--spacing-s);
+  }
+
+  .listBody {
+    position: relative;
+    width: 100%;
+    padding-right: var(--spacing-xs);
+    height: calc(100% - var(--dashboard-toolbar-height));
+    overflow-y: auto;
   }
 
   .createContent {
@@ -338,12 +401,51 @@
     position: relative;
     width: 100%;
     height: calc(100% - var(--dashboard-toolbar-height) - 1px);
+
+    &.withBanner {
+      padding-top: var(--spacing-xxl);
+    }
+  }
+
+  .info {
+    position: absolute;
+    width: 285px;
+    top: var(--spacing-s);
+    right: var(--spacing-s);
+    bottom: var(--spacing-s);
+    z-index: 5;
+    border-radius: var(--spacing-xs);
+    border: 1px solid var(--color-border-block-primary-default);
+    @include mixins.elevation(3);
+
+    &.splitMode {
+      right: auto;
+      left: calc(50% + var(--spacing-s));
+    }
+
+    &.left {
+      right: auto;
+      left: var(--spacing-s);
+
+      &.splitMode {
+        left: auto;
+        right: calc(50% + var(--spacing-s));
+      }
+    }
   }
 
   .splittedContent {
     display: flex;
     justify-content: space-between;
     align-items: stretch;
+  }
+
+  .rootConflictBanner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: var(--spacing-xxl);
   }
 
   .first {

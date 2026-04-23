@@ -30,7 +30,7 @@
     @click="emits('go', item)"
   >
     <ui3n-icon
-      icon="round-folder"
+      :icon="item.fsId.includes('sync') ? 'folder-sync' : 'round-folder'"
       :width="16"
       :height="16"
       color="var(--color-icon-control-secondary-default)"

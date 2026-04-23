@@ -1,4 +1,4 @@
-import type { ListingEntryExtended } from '@/types';
+import type { ListingEntryExtended } from '@shared/types';
 
 export type FsTableBulkActionName =
   | 'set:favorite'
@@ -6,7 +6,8 @@ export type FsTableBulkActionName =
   | 'download'
   | 'restore'
   | 'delete'
-  | 'delete:completely';
+  | 'delete:completely'
+  | 'resolve';
 
 export type FsTableBulkActions = Partial<
   Record<
@@ -20,7 +21,8 @@ export type FsTableBulkActions = Partial<
 >;
 
 export interface FsTableBulkActionsProps {
-  window: 1 | 2;
+  windowIndex: 1 | 2;
+  isInSplitMode: boolean;
   fsId: string;
   rootFolderId: string;
   folderPath: string;

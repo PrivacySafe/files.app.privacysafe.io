@@ -21,7 +21,7 @@
   import cloneDeep from 'lodash/cloneDeep';
   import { TaskRunner } from '@v1nt1248/3nclient-lib/utils';
   import { type Ui3nCheckboxValue, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
-  import type { ListingEntryExtended } from '@/types';
+  import type { ListingEntryExtended } from '@shared/types';
   import { useFsWindowState } from '@/composables/useFsWindowState';
   import { useNavigation } from '@/composables/useNavigation';
   import { useFsFolder } from '@/composables/useFsFolder';
@@ -36,7 +36,7 @@
   import isEmpty from 'lodash/isEmpty';
 
   const props = defineProps<{
-    window: 1 | 2;
+    windowIndex: 1 | 2;
   }>();
 
   const taskRunner = new TaskRunner();
@@ -49,7 +49,7 @@
   const { isDragging, isMoveMode, isMoveModeQuick } = storeToRefs(runModeInfoStore);
   const { toggleCopyMoveMode, onDragEnd } = runModeInfoStore;
 
-  const currentFsFolderWindow = computed(() => `${props.window}` as '1' | '2');
+  const currentFsFolderWindow = computed(() => props.windowIndex ? `${props.windowIndex}` as '1' | '2' : '1');
 
   const { isSplittedMode, activeWindow, selectActiveWindow } = useNavigation();
 
@@ -64,6 +64,7 @@
   } = useFsWindowState(currentFsFolderWindow);
 
   const {
+    t,
     fsFolderData,
     selectedEntities,
     showToolbar,
@@ -76,15 +77,10 @@
     handleBulkActions,
   } = useFsFolder(currentFsFolderWindow);
 
-  const {
-    draggedEntities,
-    droppableEntity,
-    onDragstart,
-    onDragend,
-    isDroppable,
-    onDragleave,
-    onDrop,
-  } = useFsDnD(currentFsFolderWindow, selectedEntities);
+  const { draggedEntities, droppableEntity, onDragstart, onDragend, isDroppable, onDragleave, onDrop } = useFsDnD(
+    currentFsFolderWindow,
+    selectedEntities,
+  );
 
   const { canDrop } = useAbilities();
 
@@ -129,10 +125,15 @@
   watch(
     [currentWindowFsId, currentWindowRootFolderId, currentWindowFolderPath],
     async ([fsIdVal, folderIdVal, pathVal], [fsIdOldVal, folderIdOldVal, pathOldVal]) => {
+      if (!fsIdVal) {
+        return;
+      }
+
       if (fsIdVal !== fsIdOldVal || folderIdVal !== folderIdOldVal || pathVal !== pathOldVal) {
         await loadFolderData();
       }
-    }, {
+    },
+    {
       immediate: true,
     },
   );
@@ -148,10 +149,11 @@
       @cancel="clearSelection"
     >
       <table-bulk-actions
-        :fs-id="currentWindowFsId"
+        :fs-id="currentWindowFsId as string"
         :root-folder-id="currentWindowRootFolderId"
         :folder-path="currentWindowFolderPath"
-        :window="window"
+        :window-index="windowIndex"
+        :is-in-split-mode="isSplittedMode"
         :selected-entities="selectedEntities"
         :is-move-mode="isMoveMode"
         :is-move-mode-quick="isMoveModeQuick"
@@ -166,7 +168,9 @@
       :class="[$style.header, activeWindow === currentFsFolderWindow && $style.headerActive]"
       @click.stop.prevent="selectActiveWindow(currentFsFolderWindow)"
     >
-      {{ activeWindow === currentFsFolderWindow ? $tr('tile.view.header.text.active') : $tr('tile.view.header.text') }}
+      {{
+        activeWindow === currentFsFolderWindow ? t('fs.tile.header.text_active') : t('fs.tile.header.text_default')
+      }}
     </div>
 
     <div :class="[$style.body, isSplittedMode && $style.bodyWithHeader, showToolbar && $style.bodyWithToolbar]">
@@ -176,19 +180,20 @@
           :key="item.id"
         >
           <tile-view-item
-            :window="window"
-            :fs-id="currentWindowFsId"
+            :window-index="windowIndex"
+            :fs-id="currentWindowFsId as string"
             :root-folder-id="currentWindowRootFolderId"
             :task-runner="taskRunner"
             :item="item"
             :is-selected="isEntitySelected(item)"
             :is-droppable="
-              !isSystemFolderInCurrentWindow
-                && !!droppableEntity
-                && item.fullPath === droppableEntity
-                && !draggedEntities.includes(item.fullPath)
-                && canDrop(currentWindowFsId, currentWindowRootFolderId)
+              !isSystemFolderInCurrentWindow &&
+                !!droppableEntity &&
+                item.fullPath === droppableEntity &&
+                !draggedEntities.includes(item.fullPath) &&
+                canDrop(currentWindowFsId, currentWindowRootFolderId)
             "
+            :disabled="commonLoading"
             @action="handleActions"
             @select="selectEntity"
             @select:multiple="onSelectMultiple(index)"
@@ -207,10 +212,11 @@
         :class="$style.dropzone"
       >
         <os-files-drop-area
-          v-if="!isDragging"
-          :fs-id="currentWindowFsId"
+          v-if="!isDragging && currentWindowFsId"
+          :fs-id="currentWindowFsId as string"
           :path="currentWindowFolderPath"
           :is-empty-folder-mode="size(sortedFsFolderData) === 0"
+          :disabled="commonLoading"
           @loading="(ev: boolean) => setCommonLoading(ev)"
         />
 
@@ -218,23 +224,23 @@
           v-if="isSplittedMode && activeWindow !== currentFsFolderWindow && isDragging"
           :path="currentWindowFolderPath"
           :droppable-entity="droppableEntity"
+          :disabled="commonLoading"
           @dragend="onDragend"
-          @dragenter="ev => isDroppable(
-            ev,
-            { type: 'folder', fullPath: currentWindowFolderPath || '/' } as ListingEntryExtended
-          )"
-          @dragover="ev => isDroppable(
-            ev,
-            { type: 'folder', fullPath: currentWindowFolderPath || '/' } as ListingEntryExtended
-          )"
-          @dragleave="ev => onDragleave(
-            ev,
-            { type: 'folder', fullPath: currentWindowFolderPath || '/' } as ListingEntryExtended
-          )"
-          @drop="ev => onDrop(
-            ev,
-            { type: 'folder', fullPath: currentWindowFolderPath || '/' } as ListingEntryExtended
-          )"
+          @dragenter="
+            ev =>
+              isDroppable(ev, { type: 'folder', fullPath: currentWindowFolderPath || '/' } as ListingEntryExtended)
+          "
+          @dragover="
+            ev =>
+              isDroppable(ev, { type: 'folder', fullPath: currentWindowFolderPath || '/' } as ListingEntryExtended)
+          "
+          @dragleave="
+            ev =>
+              onDragleave(ev, { type: 'folder', fullPath: currentWindowFolderPath || '/' } as ListingEntryExtended)
+          "
+          @drop="
+            ev => onDrop(ev, { type: 'folder', fullPath: currentWindowFolderPath || '/' } as ListingEntryExtended)
+          "
         />
       </div>
     </div>
@@ -248,7 +254,9 @@
         position-strategy="fixed"
         placement="top"
       >
-        <span><b>[{{ currentWindowFs?.name }}]</b> {{ currentWindowFolderPath.replaceAll('/', ' / ') }}</span>
+        <span>
+          <b>[{{ currentWindowFs?.name }}]</b> {{ currentWindowFolderPath.replaceAll('/', ' / ') }}
+        </span>
       </ui3n-tooltip>
     </div>
   </div>

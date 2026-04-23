@@ -1,9 +1,12 @@
 <script lang="ts" setup>
   import { computed, type ComputedRef, ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { Ui3nButton, Ui3nIcon, Ui3nMenu } from '@v1nt1248/3nclient-lib';
   import { useNavigation } from '@/composables/useNavigation';
   import { SORTABLE_FIELDS } from './constants';
-  import type { ListingEntryExtended, RouteDouble, RouteSingle } from '@/types';
+  import type { ListingEntryExtended, RouteDouble, RouteSingle } from '@shared/types';
+
+  const { t } = useI18n();
 
   const isMenuOpen = ref(false);
 
@@ -59,8 +62,8 @@
       :class="$style.sortingSelector"
     >
       <div :class="$style.sorting">
-        <span>{{ $tr('fs.entity.sorting.text') }}:</span>
-        <span>{{ $tr(selectedItem?.label || '') }}</span>
+        <span>{{ t('fs.entity.sorting_text') }}:</span>
+        <span>{{ t(selectedItem?.label || '') }}</span>
         <ui3n-icon
           :icon="sortingOrder === 'desc' ? 'round-arrow-downward' : 'round-arrow-upward'"
           width="14"
@@ -77,7 +80,7 @@
         :class="[$style.item, item.field === sortingBy && $style.selected]"
         @click="changeSort(item.field)"
       >
-        {{ $tr(item.label) }}
+        {{ t(item.label) }}
 
         <ui3n-icon
           v-if="item.field === sortingBy"

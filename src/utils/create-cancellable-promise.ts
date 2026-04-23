@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2024-2025 3NSoft Inc.
+ Copyright (C) 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -14,21 +14,20 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import type { ListingEntry } from '@/types';
+/* eslint-disable @typescript-eslint/no-unsafe-function-type */
+export function createCancellablePromise(fn: Function, signal: AbortSignal) {
+  return new Promise((resolve, reject) => {
+    signal.addEventListener('abort', () => {
+      reject(new DOMException('Abort', 'Abort'));
+    });
 
-export async function loadFolderContentList({
-  fs,
-  path,
-}: {
-  fs: web3n.files.WritableFS;
-  path: string;
-}): Promise<ListingEntry[]> {
-  try {
-    return fs.listFolder(path);
-  } catch (e) {
-    const errorMessage = `Error in 'loadFolderContentList' method. `;
-    console.error(errorMessage, e);
-    await w3n.log!('error', errorMessage, e);
-    return [];
-  }
+    // @ts-ignore
+    fn((...args) => {
+      if (signal.aborted) {
+        return;
+      }
+      // @ts-ignore
+      resolve(...args);
+    }, reject);
+  });
 }

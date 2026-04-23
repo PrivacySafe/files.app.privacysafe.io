@@ -16,9 +16,12 @@
 -->
 <script lang="ts" setup>
   import { computed } from 'vue';
-  import { Ui3nIcon } from '@v1nt1248/3nclient-lib';
+  import { useI18n } from 'vue-i18n';
+  import { storeToRefs } from 'pinia';
   import startsWith from 'lodash/startsWith';
-  import type { RootFsFolderView } from '@/types';
+  import { Ui3nIcon } from '@v1nt1248/3nclient-lib';
+  import { useSyncQueueStore } from '@/store';
+  import type { RootFsFolderView } from '@shared/types';
 
   const props = defineProps<{
     folder: RootFsFolderView;
@@ -29,7 +32,16 @@
     (event: 'select', value: RootFsFolderView): void;
   }>();
 
+  const { t } = useI18n();
+
+  const { rootFolderSyncStatus, trashFolderSyncStatus } = storeToRefs(useSyncQueueStore());
+
   const isItemSystemFolder = computed(() => startsWith(props.folder?.id, 'system'));
+  const showConflictingIcon = computed(
+    () =>
+      (props.folder.id === 'user-synced-root' && rootFolderSyncStatus.value?.state === 'conflicting') ||
+      (props.folder.id === 'user-synced-trash' && trashFolderSyncStatus.value?.state === 'conflicting'),
+  );
 </script>
 
 <template>
@@ -44,17 +56,23 @@
   >
     <ui3n-icon
       :icon="folder.icon"
-      :width="16"
-      :height="16"
-      :color="isSelected
-        ? 'var(--color-icon-control-accent-default)'
-        : 'var(--color-icon-control-secondary-default)'
+      :size="16"
+      :color="
+        isSelected ? 'var(--color-icon-control-accent-default)' : 'var(--color-icon-control-secondary-default)'
       "
     />
 
     <span :class="$style.name">
-      {{ $tr(folder.name) }}
+      {{ t(folder.name) }}
     </span>
+
+    <ui3n-icon
+      v-if="showConflictingIcon"
+      icon="round-warning"
+      :size="12"
+      color="var(--color-icon-control-warning-default)"
+      :class="$style.status"
+    />
   </div>
 </template>
 
@@ -63,6 +81,7 @@
     display: flex;
     width: 100%;
     height: var(--spacing-l);
+    min-height: var(--spacing-l);
     justify-content: flex-start;
     align-items: center;
     column-gap: var(--spacing-s);
@@ -100,7 +119,8 @@
     pointer-events: none;
     cursor: default;
 
-    div, span {
+    div,
+    span {
       opacity: 0.5;
     }
   }
@@ -109,5 +129,12 @@
     font-size: var(--font-13);
     font-weight: 600;
     color: var(--color-text-control-primary-default);
+  }
+
+  .status {
+    position: absolute;
+    top: 10px;
+    right: var(--spacing-s);
+    z-index: 1;
   }
 </style>

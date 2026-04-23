@@ -16,26 +16,29 @@
 -->
 <script lang="ts" setup>
   import { computed, ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import { storeToRefs } from 'pinia';
   import dayjs from 'dayjs';
+  import size from 'lodash/size';
   import { type Nullable, type TaskRunnerInstance, Ui3nEditable, Ui3nIcon, Ui3nProgressLinear } from '@v1nt1248/3nclient-lib';
   import { getFileExtension, isFileImage, isFileVideo } from '@v1nt1248/3nclient-lib/utils';
-  import type { FsFolderEntityEvent, ListingEntryExtended } from '@/types';
   import { useDblClickHandler } from '@/composables/useDblClickHandler';
   import { useAbilities } from '@/composables/useAbilities';
+  import { useAppStore, useFsStore, useSyncQueueStore } from '@/store';
   import { createThumbnail as _createThumbnail } from '@/utils';
+  import type { FsFolderEntityEvent, ListingEntryExtended } from '@shared/types';
   import FileType from '@/components/common/file-type/file-type.vue';
-import { useFsEntryStore } from '@/store';
-  import size from 'lodash/size';
-
+  import FsEntitySyncStatus from '@/components/common/fs-entity-sync-status/fs-entity-sync-status.vue';
 
   const props = defineProps<{
-    window: 1 | 2;
+    windowIndex: 1 | 2;
     fsId: string;
     rootFolderId: string;
     taskRunner: TaskRunnerInstance;
     item: ListingEntryExtended;
     isSelected?: boolean;
     isDroppable?: boolean;
+    disabled?: boolean;
   }>();
   const emits = defineEmits<{
     (event: 'action', value: { event: FsFolderEntityEvent; payload?: unknown }): void;
@@ -43,9 +46,22 @@ import { useFsEntryStore } from '@/store';
     (event: 'select:multiple'): void;
   }>();
 
+  const { t } = useI18n();
+
+  const appStore = useAppStore();
+  const { uploadProcesses, downloadProcesses, adoptProcesses } = storeToRefs(useSyncQueueStore());
+  const { canRename, canSetUnsetFavorite, canCopyMove } = useAbilities();
+  const { openFile } = useFsStore();
+
+  const { handleDblClick } = useDblClickHandler(onClick, onDblClick);
+
+
   const editNameMode = ref<boolean>(false);
   const thumbnail = ref<Nullable<string>>(null);
   const isThumbnailCreationProcessGoingOn = ref(false);
+
+  const isItemFromSyncedFsTable = computed(() => props.rootFolderId.includes('synced'));
+  const isFsEntryInProcessing = computed(() => uploadProcesses.value.has(props.item.fullPath) || downloadProcesses.value.has(props.item.fullPath) || adoptProcesses.value.has(props.item.fullPath));
 
   const fileExtension = computed(() => {
     if (props.item.type !== 'file') {
@@ -63,12 +79,6 @@ import { useFsEntryStore } from '@/store';
     : { backgroundImage: `url(${props.item.thumbnail || thumbnail.value})` },
   );
 
-  const { canRename, canSetUnsetFavorite, canCopyMove } = useAbilities();
-
-  const { handleDblClick } = useDblClickHandler(onClick, onDblClick);
-
-  const { openFile } = useFsEntryStore();
-
   function onClick(ev: MouseEvent) {
     ev.preventDefault();
     ev.stopImmediatePropagation();
@@ -77,19 +87,25 @@ import { useFsEntryStore } from '@/store';
 
   async function onDblClick() {
     switch (props.item.type) {
-      case 'folder':
+      case 'folder': {
         emits('action', { event: 'go', payload: props.item.fullPath });
         return;
-      case 'file':
+      }
+
+      case 'file': {
         await openFile(props.fsId, props.item.fullPath);
         return;
-      case 'link':
-        if (props.item.isFile) {
+      }
+
+      case 'link': {
+        // TODO How can I correctly determine that a link is a link to a file?
+        if (props.item.ext) {
           await openFile(props.fsId, props.item.fullPath, true);
         } else {
           emits('action', { event: 'go:linked-folder', payload: props.item.fullPath });
         }
         return;
+      }
     }
   }
 
@@ -148,6 +164,7 @@ import { useFsEntryStore } from '@/store';
     :class="[
       $style.tileViewItem,
       isSelected && $style.selected,
+      (disabled || (isFsEntryInProcessing && appStore.connectivityStatus === 'online')) && $style.tileViewItemDisabled,
       isDroppable && $style.droppable
     ]"
     :draggable="!editNameMode && canCopyMove(rootFolderId)"
@@ -155,13 +172,21 @@ import { useFsEntryStore } from '@/store';
   >
     <div :class="$style.header">
       <ui3n-icon
-        v-if="item.type === 'folder' && canSetUnsetFavorite(fsId, rootFolderId)"
+        v-if="item.type === 'folder' && canSetUnsetFavorite(fsId, rootFolderId) && !isFsEntryInProcessing && !item.brokeReason"
         icon="round-bookmark"
         width="12"
         height="12"
         :color="item.favoriteId ? 'var(--color-icon-table-accent-selected)' : 'var(--color-icon-table-accent-unselected)'"
         :class="[$style.favoriteIcon, item.favoriteId && $style.favoriteIconSelected]"
         @click.stop="updateFavorite"
+      />
+
+      <ui3n-icon
+        v-if="isFsEntryInProcessing && appStore.connectivityStatus === 'online'"
+        icon="round-lock"
+        size="12"
+        color="var(--color-icon-control-warning-default)"
+        :class="[$style.favoriteIcon, $style.favoriteIconSelected]"
       />
 
       <div
@@ -208,9 +233,17 @@ import { useFsEntryStore } from '@/store';
       <ui3n-editable
         :model-value="item.name"
         disallow-empty-value
-        :disabled="!canRename(fsId, rootFolderId)"
+        :disabled="!canRename(fsId, rootFolderId) || !!item.brokeReason"
         @toggle:edit-mode="editNameMode = $event"
         @update:model-value="updateName"
+      />
+
+      <ui3n-icon
+        v-if="item.brokeReason"
+        icon="round-crisis-alert"
+        color="var(--error-content-default)"
+        :title="`${t('app.damaged')}. ${t('app.damaged_reason')}: ${item.brokeReason}`"
+        :class="$style.iconDamaged"
       />
     </div>
 
@@ -242,6 +275,17 @@ import { useFsEntryStore } from '@/store';
 
       <span :class="$style.date">{{ displayingCTime }}</span>
     </div>
+
+    <div
+      v-if="isItemFromSyncedFsTable"
+      :class="$style.syncStatus"
+    >
+      <fs-entity-sync-status
+        :task-runner="taskRunner"
+        :fs-id="fsId"
+        :row="item"
+      />
+    </div>
   </div>
 </template>
 
@@ -266,7 +310,7 @@ import { useFsEntryStore } from '@/store';
       background-color: var(--color-bg-control-primary-hover);
     }
 
-    &:hover {
+    &:not(.tileViewItemDisabled):hover {
       background-color: var(--color-bg-control-primary-hover);
 
       .favoriteIcon {
@@ -281,6 +325,12 @@ import { useFsEntryStore } from '@/store';
       .iconType {
         display: none !important;
       }
+    }
+
+    &.tileViewItemDisabled {
+      pointer-events: none;
+      opacity: 0.5;
+      cursor: default;
     }
   }
 
@@ -340,6 +390,12 @@ import { useFsEntryStore } from '@/store';
     position: relative;
   }
 
+  .iconDamaged {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+  }
+
   .body {
     position: relative;
     flex-grow: 1;
@@ -372,5 +428,11 @@ import { useFsEntryStore } from '@/store';
     font-size: var(--font-14);
     font-weight: 400;
     color: var(--color-text-table-primary-default);
+  }
+
+  .syncStatus {
+    position: absolute;
+    top: 0;
+    right: 0;
   }
 </style>

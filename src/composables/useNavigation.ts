@@ -16,12 +16,16 @@
 */
 import { computed, type ComputedRef } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { RouteSingle, RouteDouble, ListingEntryExtended } from '@/types';
-import { APP_ROUTES } from '@/constants';
+import { storeToRefs } from 'pinia';
+import { APP_ROUTES } from '@shared/constants';
+import { useFsStore } from '@/store';
+import type { RouteSingle, RouteDouble, ListingEntryExtended } from '@shared/types';
 
 export function useNavigation() {
   const route = useRoute();
   const router = useRouter();
+
+  const { fsFolderList } = storeToRefs(useFsStore());
 
   const isSplittedMode = computed(() => route.name === APP_ROUTES.DOUBLE);
   const isTileView = computed(() => route.query.view === 'tile');
@@ -34,25 +38,42 @@ export function useNavigation() {
     return '1';
   }) as ComputedRef<'1' | '2'>;
 
-  const window1FsId = computed(() => route.params.fsId as string);
-  const window1RootFolderId = computed(() => route.params.folderId as string);
+  const window1RootFolderId = computed(() => route.params.rootFolderId as string);
+  const window1FsId = computed(() => {
+    if (!window1RootFolderId.value) {
+      return null;
+    }
+
+    const currentRootFolder = fsFolderList.value.find(f => f.id === window1RootFolderId.value);
+    if (!currentRootFolder) {
+      return null;
+    }
+
+    return currentRootFolder.fsId;
+  });
+
   const window1FolderPath = computed(() => route.query.path as string);
-  const window1SortBy = computed(() => (route.query.sortBy || 'name') as keyof ListingEntryExtended);
+  const window1SortBy = computed(() => (route.query.sortBy || 'type') as keyof ListingEntryExtended);
   const window1SortOrder = computed(() => (route.query.sortOrder || 'desc') as 'asc' | 'desc');
 
-  const window2FsId = computed(() => {
+  const window2RootFolderId = computed(() => {
     if (isSplittedMode.value) {
-      return route.params.fs2Id as string;
+      return route.params.rootFolder2Id as string;
     }
 
     return null;
   });
-  const window2RootFolderId = computed(() => {
-    if (isSplittedMode.value) {
-      return route.params.folder2Id as string;
+  const window2FsId = computed(() => {
+    if (!window2RootFolderId.value) {
+      return null;
     }
 
-    return null;
+    const currentRootFolder = fsFolderList.value.find(f => f.id === window2RootFolderId.value);
+    if (!currentRootFolder) {
+      return null;
+    }
+
+    return currentRootFolder.fsId;
   });
   const window2FolderPath = computed(() => {
     if (isSplittedMode.value) {
@@ -61,7 +82,7 @@ export function useNavigation() {
 
     return null;
   });
-  const window2SortBy = computed(() => (route.query.sort2By || 'name') as keyof ListingEntryExtended);
+  const window2SortBy = computed(() => (route.query.sort2By || 'type') as keyof ListingEntryExtended);
   const window2SortOrder = computed(() => (route.query.sort2Order || 'desc') as 'asc' | 'desc');
 
   async function navigateToRouteSingle({
@@ -71,14 +92,13 @@ export function useNavigation() {
     params?: Partial<RouteSingle['params']>;
     query?: Partial<RouteSingle['query']>;
   }) {
-    const { fsId, folderId } = route.params as RouteSingle['params'];
-    const { view = 'table', path = '', sortBy = 'name', sortOrder = 'desc' } = route.query as RouteSingle['query'];
+    const { rootFolderId } = route.params as RouteSingle['params'];
+    const { view = 'table', path = '', sortBy = 'type', sortOrder = 'desc' } = route.query as RouteSingle['query'];
 
     const newRouterData: RouteSingle = {
       name: APP_ROUTES.SINGLE,
       params: {
-        fsId: params?.fsId || fsId,
-        folderId: params?.folderId || folderId,
+        rootFolderId: params?.rootFolderId || rootFolderId,
       },
       query: {
         view: query?.view || view,
@@ -99,14 +119,14 @@ export function useNavigation() {
     params?: Partial<RouteDouble['params']>;
     query?: Partial<RouteDouble['query']>;
   }) {
-    const { fsId, folderId, fs2Id, folder2Id } = route.params as RouteDouble['params'];
+    const { rootFolderId, rootFolder2Id } = route.params as RouteDouble['params'];
     const {
       view = 'table',
       activeWindow = '1',
       path = '',
       path2 = '',
-      sortBy = 'name',
-      sort2By = 'name',
+      sortBy = 'type',
+      sort2By = 'type',
       sortOrder = 'desc',
       sort2Order = 'desc',
     } = route.query as RouteDouble['query'];
@@ -114,10 +134,8 @@ export function useNavigation() {
     const newRouterData: RouteDouble = {
       name: APP_ROUTES.DOUBLE,
       params: {
-        fsId: params?.fsId || fsId,
-        folderId: params?.folderId || folderId,
-        fs2Id: params?.fs2Id || fs2Id,
-        folder2Id: params?.folder2Id || folder2Id,
+        rootFolderId: params?.rootFolderId || rootFolderId,
+        rootFolder2Id: params?.rootFolder2Id || rootFolder2Id,
       },
       query: {
         view: query?.view || view,

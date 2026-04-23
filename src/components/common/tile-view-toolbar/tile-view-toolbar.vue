@@ -1,16 +1,22 @@
 <script lang="ts" setup>
+  import { useI18n } from 'vue-i18n';
   import { Ui3nButton, Ui3nCheckbox, type Ui3nCheckboxValue } from '@v1nt1248/3nclient-lib';
 
-  withDefaults(defineProps<{
-    selectedCount: number;
-    indeterminate?: boolean;
-  }>(), {
-    selectedCount: 0,
-  });
+  withDefaults(
+    defineProps<{
+      selectedCount?: number;
+      indeterminate?: boolean;
+    }>(),
+    {
+      selectedCount: 0,
+    },
+  );
   const emits = defineEmits<{
     (event: 'toggle:selected', value: Ui3nCheckboxValue): void;
     (event: 'cancel'): void;
   }>();
+
+  const { t } = useI18n();
 </script>
 
 <template>
@@ -20,7 +26,7 @@
       :indeterminate="indeterminate"
       @change="emits('toggle:selected', $event)"
     >
-      {{ $tr('app.selected') }}: {{ selectedCount }}
+      {{ t('app.selected') }}: {{ selectedCount }}
     </ui3n-checkbox>
 
     <div :class="$style.body">
@@ -31,7 +37,7 @@
       type="secondary"
       @click="emits('cancel')"
     >
-      {{ $tr('dialog.cancel.button.default') }}
+      {{ t('dialog.button.cancel') }}
     </ui3n-button>
   </div>
 </template>

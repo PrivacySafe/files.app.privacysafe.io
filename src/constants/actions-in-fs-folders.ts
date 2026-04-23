@@ -3,27 +3,31 @@ import type { FsTableBulkActions } from '@/components/common/fs-table-bulk-actio
 export const FS_TABLE_BULK_ACTIONS: FsTableBulkActions = {
   'set:favorite': {
     icon: 'outline-bookmark-add',
-    tooltip: 'Mark as/Unmark as Favorite folder',
+    tooltip: 'fs.bulk_action.tooltip.set-favorite',
   },
   download: {
     icon: 'outline-download-for-offline',
-    tooltip: 'Download selected objects',
+    tooltip: 'fs.bulk_action.tooltip.download',
+  },
+  resolve: {
+    icon: 'cloud-alert-outline-rounded',
+    tooltip: 'fs.bulk_action.tooltip.resolve',
   },
   delete: {
     icon: 'outline-delete',
-    tooltip: 'Delete selected objects to the Trash folder',
+    tooltip: 'fs.bulk_action.tooltip.delete',
   },
   'delete:completely': {
     icon: 'trash-can',
     iconColor: 'var(--error-content-default)',
-    tooltip: 'Permanently delete selected objects',
+    tooltip: 'fs.bulk_action.tooltip.delete_completely',
   },
   restore: {
     icon: 'round-refresh',
-    tooltip: 'Restore selected objects',
+    tooltip: 'fs.bulk_action.tooltip.restore',
   },
   'copy/move': {
     icon: '',
-    tooltip: 'Copy/Move selected objects',
+    tooltip: 'fs.bulk_action.tooltip.copy_move',
   },
 };

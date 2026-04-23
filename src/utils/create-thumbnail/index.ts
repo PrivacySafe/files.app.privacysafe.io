@@ -16,14 +16,14 @@
 */
 import { getFileExtension, isFileImage, isFileVideo } from '@v1nt1248/3nclient-lib/utils';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
-import { useFsEntryStore } from '@/store';
+import { useFsStore } from '@/store';
 import { createImageThumbnail } from './create-image-thumbnail';
 import { createVideoThumbnail } from './create-video-thumbnail';
 import { createPdfThumbnail } from './create-pdf-thumbnail';
 
 export async function createThumbnail(fsId: string, path: string): Promise<Nullable<string>> {
-  const fsEntryStore = useFsEntryStore();
-  const fs = fsEntryStore.getFs(fsId);
+  const fsStore = useFsStore();
+  const fs = fsStore.getFs(fsId);
 
   const fileExt = getFileExtension(path);
   if (isFileImage({ fullName: path.toLowerCase() })) {

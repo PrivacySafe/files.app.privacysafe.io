@@ -1,10 +1,33 @@
-import { computed, type ComputedRef, defineAsyncComponent, inject, onBeforeMount, onBeforeUnmount, ref } from 'vue';
+/*
+ Copyright (C) 2025 3NSoft Inc.
+
+ This program is free software: you can redistribute it and/or modify it under
+ the terms of the GNU General Public License as published by the Free Software
+ Foundation, either version 3 of the License, or (at your option) any later
+ version.
+
+ This program is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ See the GNU General Public License for more details.
+
+ You should have received a copy of the GNU General Public License along with
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
+import {
+  computed,
+  type ComputedRef,
+  defineAsyncComponent,
+  inject,
+  onBeforeMount,
+  onBeforeUnmount,
+  ref,
+} from 'vue';
+import { useI18n } from 'vue-i18n';
 import isEmpty from 'lodash/isEmpty';
 import {
   DIALOGS_KEY,
   DialogsPlugin,
-  I18N_KEY,
-  I18nPlugin,
   NOTIFICATIONS_KEY,
   NotificationsPlugin,
   VUEBUS_KEY,
@@ -12,13 +35,16 @@ import {
 } from '@v1nt1248/3nclient-lib/plugins';
 import { useNavigation } from '@/composables/useNavigation';
 import { useFsWindowState } from '@/composables/useFsWindowState';
-import { useAppStore, useFsEntryStore, useRunModeInfoStore } from '@/store';
-import { type AppGlobalEvents, FsFolderEntityEvent, ListingEntryExtended } from '@/types';
+import { useSort } from '@/composables/useSort';
+import { useAppStore, useFsStore, useRunModeInfoStore } from '@/store';
+import { type AppGlobalEvents, FsFolderEntityEvent, ListingEntryExtended } from '@shared/types';
 import type { FsTableBulkActionName } from '@/components/common/fs-table-bulk-actions/types';
+import { prepareFolderPath } from '@/utils';
+import isEqual from 'lodash/isEqual';
 
 export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
+  const { t } = useI18n();
   const bus = inject<VueBusPlugin<AppGlobalEvents>>(VUEBUS_KEY)!;
-  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
   const dialogs = inject<DialogsPlugin>(DIALOGS_KEY)!;
   const notifications = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
 
@@ -28,7 +54,15 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
   const runModeInfoStore = useRunModeInfoStore();
   const { deleteSelectedEntities } = runModeInfoStore;
 
-  const { downloadEntities, restoreEntities } = useFsEntryStore();
+  const {
+    getFolderContentList,
+    getFolderContentFilledList,
+    downloadEntities,
+    renameEntity,
+    restoreEntities,
+    setFolderAsFavorite,
+    unsetFolderAsFavorite,
+  } = useFsStore();
 
   const {
     isSplittedMode,
@@ -42,12 +76,14 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
 
   const {
     currentWindowFsId,
+    currentWindowRootFolderId,
+    currentWindowFolderPath,
     currentWindowRootFolderBasePath,
     isTrashFolderInCurrentWindow,
     isSystemFolderInCurrentWindow,
   } = useFsWindowState(fsFolderWindow);
 
-  const { getFolderContentFilledList, setFolderAsFavorite, unsetFolderAsFavorite, renameEntity } = useFsEntryStore();
+  const { changeSort, sortFolderData } = useSort(fsFolderWindow);
 
   const fsFolderData = ref<ListingEntryExtended[]>([]);
   const selectedEntities = ref<ListingEntryExtended[]>([]);
@@ -55,64 +91,58 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
 
   const isNoDataInFolder = computed(() => isEmpty(selectedEntities.value));
 
-  async function getFsFolderData(window: '1' | '2', basePath = ''): Promise<ListingEntryExtended[]> {
-    const fsId = window === '1' ? window1FsId.value! : window2FsId.value!;
+  async function getFsFolderData(
+    window: '1' | '2',
+    basePath = '',
+  ): Promise<{ rootFolderId: string; path: string; data: ListingEntryExtended[] }> {
+    const fsId = (window === '1' ? window1FsId.value! : window2FsId.value!) as string;
     const path = window === '1' ? window1FolderPath.value : window2FolderPath.value!;
-    return getFolderContentFilledList({ fsId, path, basePath });
+    return getFolderContentFilledList({
+      fsId,
+      rootFolderId: currentWindowRootFolderId.value,
+      path,
+      basePath,
+      operatingSystem: appStore.operatingSystem,
+    });
+  }
+
+  async function processAfterCompleteSyncSrvInitialization() {
+    const fullFolderPath = prepareFolderPath([
+      currentWindowRootFolderBasePath.value,
+      currentWindowFolderPath.value,
+    ]);
+    const folderList = await getFolderContentList({ fsId: currentWindowFsId.value!, path: fullFolderPath });
+    const folderEntities = folderList.map(item => item.name).sort();
+    const displayingFolderEntities = (fsFolderData.value || [])
+      .map((item: ListingEntryExtended) => item.fullPath)
+      .sort();
+    if (!isEqual(folderEntities, displayingFolderEntities)) {
+      await loadFolderData();
+    }
+  }
+
+  async function refreshData({ path, withoutVerify }: { path: string; withoutVerify?: boolean }): Promise<void> {
+    if (path === currentWindowFolderPath.value || withoutVerify) {
+      await loadFolderData();
+    }
   }
 
   async function loadFolderData() {
     try {
       setCommonLoading(true);
-      fsFolderData.value = await getFsFolderData(fsFolderWindow.value, currentWindowRootFolderBasePath.value);
+
+      const { rootFolderId, path, data } = await getFsFolderData(
+        fsFolderWindow.value,
+        currentWindowRootFolderBasePath.value,
+      );
+      const currentPath = fsFolderWindow.value === '1' ? window1FolderPath.value : window2FolderPath.value!;
+
+      if (rootFolderId === currentWindowRootFolderId.value && path === currentPath) {
+        fsFolderData.value = data;
+      }
     } finally {
       setCommonLoading(false);
     }
-  }
-
-  async function changeSort(val: { field: keyof ListingEntryExtended; direction: 'asc' | 'desc' }) {
-    if (isSplittedMode.value) {
-      await navigateToRouteDouble({
-        query: {
-          ...(fsFolderWindow.value === '1' && {
-            sortBy: val.field,
-            sortOrder: val.direction,
-          }),
-          ...(fsFolderWindow.value === '2' && {
-            sort2By: val.field,
-            sort2Order: val.direction,
-          }),
-        },
-      });
-    } else {
-      await navigateToRouteSingle({
-        query: {
-          sortBy: val.field,
-          sortOrder: val.direction,
-        },
-      });
-    }
-  }
-
-  function sortFolderData(
-    a: ListingEntryExtended,
-    b: ListingEntryExtended,
-    field: keyof ListingEntryExtended,
-    direction: 'asc' | 'desc',
-  ): -1 | 1 {
-    const aFieldValue = field === 'ext' && a.type === 'file' ? `${a.ext}-${a.name}` : a[field]!;
-    const aFieldValueProcessed = typeof aFieldValue === 'string' ? aFieldValue.toLowerCase() : aFieldValue;
-
-    const bFieldValue = field === 'ext' && a.type === 'file' ? `${b.ext}-${b.name}` : b[field]!;
-    const bFieldValueProcessed = typeof bFieldValue === 'string' ? bFieldValue.toLowerCase() : bFieldValue;
-
-    return aFieldValueProcessed > bFieldValueProcessed
-      ? direction === 'desc'
-        ? 1
-        : -1
-      : direction === 'desc'
-        ? -1
-        : 1;
   }
 
   function isEntitySelected(entity: ListingEntryExtended): boolean {
@@ -151,7 +181,7 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
         }
 
         return navigateToRouteSingle({
-          params: { fsId: currentWindowFsId.value },
+          params: { rootFolderId: currentWindowRootFolderId.value },
           query: { path },
         });
       }
@@ -160,7 +190,7 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
         if (isTrashFolderInCurrentWindow.value || isSystemFolderInCurrentWindow.value) return;
 
         const { entity, newName } = payload as { entity: ListingEntryExtended; newName: string };
-        await renameEntity({ fsId: currentWindowFsId.value, entity, newName });
+        await renameEntity({ fsId: currentWindowFsId.value as string, entity, newName });
         await loadFolderData();
         return;
       }
@@ -170,9 +200,9 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
 
         const { favoriteId, fullPath } = (payload as { entity: ListingEntryExtended }).entity;
         if (favoriteId) {
-          await unsetFolderAsFavorite({ fsId: currentWindowFsId.value, id: favoriteId, fullPath });
+          await unsetFolderAsFavorite({ fsId: currentWindowFsId.value as string, id: favoriteId, fullPath });
         } else {
-          await setFolderAsFavorite({ fsId: currentWindowFsId.value, fullPath });
+          await setFolderAsFavorite({ fsId: currentWindowFsId.value as string, fullPath });
         }
         await loadFolderData();
         return;
@@ -187,65 +217,61 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
   ) {
     switch (action) {
       case 'delete':
-        await deleteSelectedEntities({ fsId: currentWindowFsId.value, entities, completely: false });
+        await deleteSelectedEntities({ fsId: currentWindowFsId.value as string, entities, completely: false });
         break;
 
       case 'delete:completely': {
         const component = defineAsyncComponent(() => import('@/components/dialogs/confirmation-dialog.vue'));
-        dialogs.$openDialog<typeof component>({
-          component,
-          componentProps: {
-            dialogText: $tr('fs.entity.delete.permanently.warning1'),
-            additionalDialogText: $tr('fs.entity.delete.permanently.warning2'),
-          },
+
+        const dialogRes = await dialogs.$openDialog(component, {
+          dialogText: t('fs.permanently_delete.warning1'),
+          additionalDialogText: t('fs.permanently_delete.warning2'),
           dialogProps: {
-            title: $tr('fs.entity.delete.permanently.title'),
-            confirmButtonText: $tr('fs.entity.delete.permanently.confirm,button'),
+            title: t('fs.permanently_delete.title'),
+            confirmButtonText: t('fs.permanently_delete.button.confirm'),
             confirmButtonBackground: 'var(--error-content-default)',
             confirmButtonColor: 'var(--error-fill-default)',
-            onConfirm: async () => {
-              try {
-                await deleteSelectedEntities({ fsId: currentWindowFsId.value, entities, completely: true });
-
-                notifications.$createNotice({
-                  type: 'info',
-                  withIcon: true,
-                  content:
-                    entities.length > 1
-                      ? $tr('fs.entity.delete.plural.message.success', { count: `${entities.length}` })
-                      : $tr('fs.entity.delete.single.message.success'),
-                });
-              } catch (err) {
-                w3n.log('error', err as string);
-
-                notifications.$createNotice({
-                  type: 'error',
-                  withIcon: true,
-                  content:
-                    entities.length > 1
-                      ? $tr('fs.entity.delete.plural.message.error', { count: `${entities.length}` })
-                      : $tr('fs.entity.delete.single.message.error'),
-                });
-              }
-            },
           },
         });
+        if (dialogRes.event === 'confirm') {
+          try {
+            await deleteSelectedEntities({ fsId: currentWindowFsId.value as string, entities, completely: true });
+
+            notifications.$createNotice({
+              type: 'info',
+              withIcon: true,
+              content: t('fs.entity.message.success.delete', { count: entities.length }),
+            });
+          } catch (err) {
+            w3n.log('error', err as string);
+
+            notifications.$createNotice({
+              type: 'error',
+              withIcon: true,
+              content: t('fs.entity.message.error.delete', { count: `${entities.length}` }),
+            });
+          }
+        }
+
         break;
       }
 
       case 'restore': {
         let res;
         try {
-          res = await restoreEntities({ fsId: currentWindowFsId.value, entities });
+          res = await restoreEntities({ fsId: currentWindowFsId.value as string, entities });
           if (res && res > 0) {
-            bus.$emitter.emit('refresh:data', void 0);
+            const entitiesParentFolders = entities.map(e => e.parentFolder);
+            const isCurrentProcessedPathParent = entitiesParentFolders.find(
+              p => p === currentWindowFolderPath.value,
+            );
+            if (isCurrentProcessedPathParent) {
+              bus.$emitter.emit('refresh:data', { path: currentWindowFolderPath.value });
+            }
             notifications.$createNotice({
               type: 'success',
               withIcon: true,
-              content:
-                res > 1
-                  ? $tr('fs.entity.restore.plural.message.success', { count: `${res}` })
-                  : $tr('fs.entity.restore.single.message.success'),
+              content: t('fs.entity.message.success.restore', { count: res }),
             });
           }
         } catch (err) {
@@ -253,17 +279,17 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
           notifications.$createNotice({
             type: 'error',
             withIcon: true,
-            content:
-              res && res > 1
-                ? $tr('fs.entity.restore.plural.message.error', { count: `${res}` })
-                : $tr('fs.entity.restore.single.message.error'),
+            content: t('fs.entity.message.error.restore', { count: res }),
           });
         }
         break;
       }
 
       case 'download':
-        await downloadEntities({ fsId: currentWindowFsId.value, entities });
+        await downloadEntities({ fsId: currentWindowFsId.value as string, entities });
+        break;
+
+      case 'resolve':
         break;
     }
   }
@@ -271,18 +297,21 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
   onBeforeMount(() => {
     bus.$emitter.on('create:folder', loadFolderData);
     bus.$emitter.on('upload:file', loadFolderData);
-    bus.$emitter.on('refresh:data', loadFolderData);
+    bus.$emitter.on('refresh:data', refreshData);
     bus.$emitter.on('drag:end', clearSelection);
+    bus.$emitter.on('complete:sync-srv-init', processAfterCompleteSyncSrvInitialization);
   });
 
   onBeforeUnmount(() => {
     bus.$emitter.off('create:folder', loadFolderData);
     bus.$emitter.off('upload:file', loadFolderData);
-    bus.$emitter.off('refresh:data', loadFolderData);
+    bus.$emitter.off('refresh:data', refreshData);
     bus.$emitter.off('drag:end', clearSelection);
+    bus.$emitter.off('complete:sync-srv-init', processAfterCompleteSyncSrvInitialization);
   });
 
   return {
+    t,
     fsFolderData,
     selectedEntities,
     showToolbar,

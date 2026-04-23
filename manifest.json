@@ -3,7 +3,7 @@
   "appDomain": "files.app.privacysafe.io",
   "icon": "logo.png",
   "description": "Feature-rich file manager for secure storage of your digital assets.",
-  "version": "0.7.7",
+  "version": "0.7.8",
 
   "components": {
     "/index.html": {
@@ -17,6 +17,7 @@
         "mailerid": true,
         "shell": {
           "fileDialog": "all",
+          "clipboard": "all",
           "userNotifications": true,
           "fsResource": {
             "otherApps": {
@@ -24,6 +25,45 @@
             }
           },
           "openDashboard": true,
+          "openFile": "all",
+          "mounts": "any",
+          "openInMountedFolder": "all"
+        },
+        "storage": {
+          "appFS": "default",
+          "userFS": "all",
+          "sysFS": "all"
+        },
+        "appRPC": [
+          "AppStorageInternal"
+        ],
+        "connectivity": "check"
+      },
+      "windowOpts": {
+        "width": 1200,
+        "height": 680,
+        "minWidth": 1024,
+        "minHeight": 600,
+        "maxWidth": 1680
+      }
+    },
+
+    "/storageDenoServices.js": {
+      "services": {
+        "AppStorageInternal": {
+          "thisAppComponents": "*"
+        }
+      },
+      "runtime": "deno",
+      "capsRequested": {
+        "appRPC": [
+          "AppStorageInternal"
+        ],
+        "log": "all",
+        "mailerid": true,
+        "shell": {
+          "fileDialog": "all",
+          "userNotifications": true,
           "openFile": "all",
           "mountVolumes": "all"
         },
@@ -33,13 +73,6 @@
           "sysFS": "all"
         },
         "connectivity": "check"
-      },
-      "windowOpts": {
-        "width": 1200,
-        "height": 680,
-        "minWidth": 1024,
-        "minHeight": 600,
-        "maxWidth": 1680
       }
     }
   },

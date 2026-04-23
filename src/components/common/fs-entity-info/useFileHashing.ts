@@ -17,8 +17,9 @@
 import { computed, type ComputedRef, Ref, ref, shallowRef } from 'vue';
 import { createSHA256, createSHA512 } from 'hash-wasm';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
-import { useFsEntryStore } from '@/store';
-import { ListingEntryExtended } from '@/types';
+import { useFsStore } from '@/store';
+import { executeFunc } from '@shared/utils/execute-function';
+import type { ListingEntryExtended } from '@shared/types';
 
 const HASHES_XATTR_NAME = 'cached-hashes';
 const SHA256_ALG = 'SHA-256';
@@ -38,7 +39,11 @@ type FileByteSource = web3n.files.FileByteSource;
 
 async function readCachedHashes(file: ReadonlyFile): Promise<CachedFileContentHashes | undefined> {
   try {
-    const hashes = (await file.getXAttr(HASHES_XATTR_NAME)) as CachedFileContentHashes | undefined;
+    const hashes = await executeFunc<[string], Promise<CachedFileContentHashes | undefined>>({
+      fn: file.getXAttr,
+      fnArgs: [HASHES_XATTR_NAME],
+    });
+
     if (!hashes || typeof hashes !== 'object') {
       return;
     }
@@ -70,7 +75,10 @@ async function cacheHashInXAttrOf(
     } else {
       hashes = { contentMTime, contentLen, hashes: { [alg]: hashInHex } };
     }
-    await file.updateXAttrs({ set: { [HASHES_XATTR_NAME]: hashes } });
+    await executeFunc({
+      fn: file.updateXAttrs,
+      fnArgs: [{ set: { [HASHES_XATTR_NAME]: hashes } }],
+    });
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
   } catch (err) {
     /* empty */
@@ -127,7 +135,7 @@ export function useFileHashing(
   path: ComputedRef<string>,
   fileStats: Ref<Nullable<ListingEntryExtended>>,
 ) {
-  const { getFs } = useFsEntryStore();
+  const { getFs } = useFsStore();
 
   const sha256hex = ref<Nullable<string>>(null);
   const calculating256 = ref(false);
@@ -146,7 +154,10 @@ export function useFileHashing(
   async function loadFile() {
     if (!file.value) {
       const fs = getFs(fsId.value);
-      file.value = await fs.writableFile(path.value);
+      file.value = await executeFunc({
+        fn: fs.writableFile,
+        fnArgs: [path.value],
+      });
     }
   }
 
@@ -163,10 +174,13 @@ export function useFileHashing(
       const sha256 = await createSHA256();
       sha256.init();
 
-      const content = await file.value!.getByteSource();
+      const content = await executeFunc({
+        fn: file.value!.getByteSource,
+        fnArgs: [],
+      });
 
       await readAndHashProcess(
-        content,
+        content!,
         sha256,
         bytesDone => {
           sha256progress.value = Math.floor((bytesDone / fileSize.value) * 100);
@@ -188,10 +202,13 @@ export function useFileHashing(
       const sha512 = await createSHA512();
       sha512.init();
 
-      const content = await file.value!.getByteSource();
+      const content = await executeFunc({
+        fn: file.value!.getByteSource,
+        fnArgs: [],
+      });
 
       await readAndHashProcess(
-        content,
+        content!,
         sha512,
         bytesDone => {
           sha512progress.value = Math.floor((bytesDone / fileSize.value) * 100);

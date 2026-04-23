@@ -14,8 +14,7 @@ See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along with
 this program. If not, see <http://www.gnu.org/licenses/>.
 */
-
-import { I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
+/* eslint-disable @typescript-eslint/no-explicit-any  */
 import { b64ToBlob, uint8ToDataURL } from '@v1nt1248/3nclient-lib/utils';
 
 type ReadonlyFile = web3n.files.ReadonlyFile;
@@ -28,10 +27,10 @@ export async function selectImageFilesWithDialog(
   title: string,
   btnLabel: string,
   multiSelections: boolean,
-  $tr: I18nPlugin['$tr'],
+  t: any,
 ): Promise<ReadonlyFile | ReadonlyFile[] | undefined> {
   const files = await w3n.shell!.fileDialogs!.openFileDialog!(title, btnLabel, multiSelections, [
-    { extensions: IMG_FILE_EXTS, name: $tr('dialog.open-file.image-type') },
+    { extensions: IMG_FILE_EXTS, name: t('dialog.open-file.image-type') },
   ]);
   return files ? (files.length > 1 ? files : files[0]) : undefined;
 }
@@ -39,9 +38,9 @@ export async function selectImageFilesWithDialog(
 export async function selectOneImageFileWithDialog(
   title: string,
   btnLabel: string,
-  $tr: I18nPlugin['$tr'],
+  t: any,
 ): Promise<ReadonlyFile | undefined> {
-  const file = await selectImageFilesWithDialog(title, btnLabel, false, $tr);
+  const file = await selectImageFilesWithDialog(title, btnLabel, false, t);
   return file ? (file as ReadonlyFile) : undefined;
 }
 

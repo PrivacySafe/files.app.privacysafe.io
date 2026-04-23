@@ -15,70 +15,100 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-  import { computed, inject } from 'vue';
+  import { computed } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import size from 'lodash/size';
-  import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
-  import { Ui3nButton } from '@v1nt1248/3nclient-lib';
-  import ConfirmationDialog from './confirmation-dialog.vue';
+  import {
+    Ui3nButton,
+    Ui3nDialog,
+    type Ui3nDialogEvent,
+    type Ui3nDialogComponentProps,
+  } from '@v1nt1248/3nclient-lib';
 
-  const props = withDefaults(defineProps<{
-    entityNames?: string[];
-  }>(), {
-    entityNames: () => [],
-  });
-  const emits = defineEmits(['close', 'select', 'confirm']);
-
-  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
-
-  const mainText = computed(() => size(props.entityNames) > 1
-    ? $tr('fs.entity.restore.plural.main.text', { name: props.entityNames.join(', ') })
-    : $tr('fs.entity.restore.single.main.text', { name: props.entityNames[0] })
+  const props = withDefaults(
+    defineProps<{
+      entityNames?: string[];
+      dialogProps?: Ui3nDialogComponentProps<'keep' | 'replace'>;
+    }>(),
+    {
+      entityNames: () => [],
+      dialogProps: () => ({}),
+    },
   );
-  const questionText = computed(() => size(props.entityNames) > 1
-    ? $tr('fs.entity.restore.plural.question')
-    : $tr('fs.entity.restore.single.question')
+  const emits = defineEmits<{
+    (event: 'action', value: { event: Ui3nDialogEvent; data?: 'keep' | 'replace' }): void;
+  }>();
+
+  const { t } = useI18n();
+
+  const mainText = computed(() =>
+    t(
+      'dialog.restore.text',
+      { name: size(props.entityNames) > 1 ? props.entityNames.join(', ') : props.entityNames[0] },
+      size(props.entityNames),
+    ),
   );
+
+  const questionText = computed(() => t('dialog.restore.question', size(props.entityNames) === 1 ? 1 : 2));
 
   function processClick(action: 'keep' | 'replace') {
-    emits('select', action);
-    emits('confirm');
+    emits('action', { event: 'confirm', data: action });
   }
 </script>
 
 <template>
-  <div :class="$style.restoreFsEntitiesDialog">
-    <confirmation-dialog
-      :dialog-text="mainText"
-      :additional-dialog-text="questionText"
-    />
+  <ui3n-dialog
+    v-bind="dialogProps"
+    @action="emits('action', $event)"
+  >
+    <template #body>
+      <div :class="$style.restoreFsEntitiesDialog">
+        {{ mainText }}
 
-    <div :class="$style.dialogActions">
-      <ui3n-button
-        type="secondary"
-        @click.stop.prevent="emits('close')"
-      >
-        {{ $tr('dialog.cancel.button.default') }}
-      </ui3n-button>
+        <span>{{ questionText }}</span>
+      </div>
+    </template>
 
-      <div :class="$style.actionsBlock">
+    <template #actions>
+      <div :class="$style.dialogActions">
         <ui3n-button
           type="secondary"
-          @click.stop.prevent="processClick('keep')"
+          @click.stop.prevent="emits('action', { event: 'close' })"
         >
-          {{ $tr('fs.entity.restore.keep.button') }}
+          {{ t('dialog.button.cancel') }}
         </ui3n-button>
 
-        <ui3n-button @click.stop.prevent="processClick('replace')">
-          {{ $tr('fs.entity.restore.replace.button') }}
-        </ui3n-button>
+        <div :class="$style.actionsBlock">
+          <ui3n-button
+            type="secondary"
+            @click.stop.prevent="processClick('keep')"
+          >
+            {{ t('fs.entity.button.restore_keep') }}
+          </ui3n-button>
+
+          <ui3n-button @click.stop.prevent="processClick('replace')">
+            {{ t('fs.entity.button.restore_replace') }}
+          </ui3n-button>
+        </div>
       </div>
-    </div>
-  </div>
+    </template>
+  </ui3n-dialog>
 </template>
 
 <style lang="scss" module>
   .restoreFsEntitiesDialog {
     position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    row-gap: var(--spacing-s);
+    padding: var(--spacing-m);
+    font-size: var(--font-14);
+    line-height: var(--font-20);
+    font-weight: 400;
+    color: var(--color-text-block-primary-default);
+    text-align: center;
   }
 
   .dialogActions {

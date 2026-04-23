@@ -15,9 +15,18 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-  import { computed, inject, ref, watch } from 'vue';
-  import { I18N_KEY, I18nPlugin } from '@v1nt1248/3nclient-lib/plugins';
-  import { Ui3nDropFiles, Ui3nIcon, Ui3nInputFile, Ui3nProgressLinear, Ui3nHtml } from '@v1nt1248/3nclient-lib';
+  import { computed, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import {
+    Ui3nDialog,
+    Ui3nDropFiles,
+    Ui3nIcon,
+    Ui3nInputFile,
+    Ui3nProgressLinear,
+    Ui3nHtml,
+    type Ui3nDialogComponentProps,
+    type Ui3nDialogEvent,
+  } from '@v1nt1248/3nclient-lib';
   import { getRandomId, getFileExtension, formatFileSize } from '@v1nt1248/3nclient-lib/utils';
   import FileType from '@/components/common/file-type/file-type.vue';
 
@@ -25,30 +34,33 @@
 
   const props = defineProps<{
     currentFolder: string;
+    dialogProps?: Ui3nDialogComponentProps<File[]>;
   }>();
 
   const emits = defineEmits<{
-    (event: 'close'): void;
-    (event: 'select', value: File[]): void;
-    (event: 'confirm'): void;
+    (event: 'action', value: { event: Ui3nDialogEvent; data?: File[] }): void;
   }>();
 
-  const { $tr } = inject<I18nPlugin>(I18N_KEY)!;
+  const { t } = useI18n();
 
   const files = ref<Record<string, File>>({});
   const isUploading = ref(false);
   const totalSize = ref<number>(0);
   const progress = ref<Record<string, number>>({});
 
-  const currentFolderName = computed(() => props.currentFolder ? props.currentFolder.replaceAll('/', ' / ') : 'Home');
+  const currentFolderName = computed(() =>
+    props.currentFolder ? props.currentFolder.replaceAll('/', ' / ') : 'Home',
+  );
 
-  const uploadedSize = computed(() => Object.keys(progress.value).reduce((acc, id) => {
-    const fileSize = files.value[id].size;
-    const fileProgress = progress.value[id];
-    const uploadedFileSize = fileSize * fileProgress / 100;
-    acc += uploadedFileSize;
-    return acc;
-  }, 0));
+  const uploadedSize = computed(() =>
+    Object.keys(progress.value).reduce((acc, id) => {
+      const fileSize = files.value[id].size;
+      const fileProgress = progress.value[id];
+      const uploadedFileSize = (fileSize * fileProgress) / 100;
+      acc += uploadedFileSize;
+      return acc;
+    }, 0),
+  );
 
   function updateProgress(ev: ProgressEvent, id: string): void {
     if (ev.lengthComputable) {
@@ -71,13 +83,13 @@
 
         const controller = new AbortController();
 
-        reader.addEventListener('loadstart', (event) => updateProgress(event, id));
-        reader.addEventListener('load', (event) => updateProgress(event, id));
+        reader.addEventListener('loadstart', event => updateProgress(event, id));
+        reader.addEventListener('load', event => updateProgress(event, id));
         reader.addEventListener('loadend', () => {
           progress.value[id] = 100;
           controller.abort();
         });
-        reader.addEventListener('progress', (event) => updateProgress(event, id));
+        reader.addEventListener('progress', event => updateProgress(event, id));
 
         reader.readAsDataURL(file);
       }
@@ -88,84 +100,90 @@
     () => uploadedSize.value,
     () => {
       if (isUploading.value && uploadedSize.value === totalSize.value) {
-        emits('select', Object.values(files.value));
-        emits('confirm');
+        emits('action', { event: 'confirm', data: Object.values(files.value) });
       }
     },
   );
 </script>
 
 <template>
-  <div :class="$style.uploadFilesDialog">
-    <div
-      v-if="isUploading"
-      :class="$style.uploading"
-    >
-      <div :class="$style.uploadingHeader">
-        <div :class="$style.folderName">
-          {{ currentFolderName }}
-        </div>
-
-        <div :class="$style.totalProgress">
-          {{ totalSize === 0 ? 0 : parseInt(((uploadedSize / totalSize) * 100).toFixed(1)) }}%
-        </div>
-      </div>
-
-      <div :class="$style.uploadingContent">
+  <ui3n-dialog
+    v-bind="dialogProps"
+    @action="emits('action', $event)"
+  >
+    <template #body>
+      <div :class="$style.uploadFilesDialog">
         <div
-          v-for="(value, id) in progress"
-          :key="id"
-          :class="$style.uploadingItem"
+          v-if="isUploading"
+          :class="$style.uploading"
         >
-          <div :class="$style.uploadingItemBody">
-            <div :class="$style.uploadingItemLabel">
-              <ui3n-icon
-                icon="round-subject"
-                color="var(--color-icon-table-secondary-default)"
-              />
-
-              <div :class="$style.uploadingItemName">
-                {{ files[id].name }}
-              </div>
+          <div :class="$style.uploadingHeader">
+            <div :class="$style.folderName">
+              {{ currentFolderName }}
             </div>
 
-            <ui3n-progress-linear :value="value" />
+            <div :class="$style.totalProgress">
+              {{ totalSize === 0 ? 0 : parseInt(((uploadedSize / totalSize) * 100).toFixed(1)) }}%
+            </div>
           </div>
 
-          <div :class="$style.uploadingItemType">
-            <file-type :file-type="getFileExtension(files[id].name).toLowerCase()" />
-          </div>
+          <div :class="$style.uploadingContent">
+            <div
+              v-for="(value, id) in progress"
+              :key="id"
+              :class="$style.uploadingItem"
+            >
+              <div :class="$style.uploadingItemBody">
+                <div :class="$style.uploadingItemLabel">
+                  <ui3n-icon
+                    icon="round-subject"
+                    color="var(--color-icon-table-secondary-default)"
+                  />
 
-          <div :class="$style.uploadingItemSize">
-            {{ formatFileSize(files[id].size) }}
+                  <div :class="$style.uploadingItemName">
+                    {{ files[id].name }}
+                  </div>
+                </div>
+
+                <ui3n-progress-linear :value="value" />
+              </div>
+
+              <div :class="$style.uploadingItemType">
+                <file-type :file-type="getFileExtension(files[id].name).toLowerCase()" />
+              </div>
+
+              <div :class="$style.uploadingItemSize">
+                {{ formatFileSize(files[id].size) }}
+              </div>
+            </div>
           </div>
         </div>
+
+        <ui3n-drop-files
+          v-else
+          permanent-display
+          @select="onFilesSelect"
+        >
+          <template #additional-text>
+            <div :class="$style.additional">
+              <span :class="$style.text">
+                {{ t('dialog.upload_files.text1') }}: <b>{{ currentFolder ? `/${currentFolder}` : 'Home' }}</b>
+              </span>
+
+              <div :class="$style.additionalInfo">
+                <span v-ui3n-html="t('dialog.upload_files.text2')" />&nbsp;
+                <ui3n-input-file
+                  multiple
+                  :button-text="t('app.upload_file')"
+                  @update:model-value="onFilesSelect"
+                />
+              </div>
+            </div>
+          </template>
+        </ui3n-drop-files>
       </div>
-    </div>
-
-    <ui3n-drop-files
-      v-else
-      permanent-display
-      @select="onFilesSelect"
-    >
-      <template #additional-text>
-        <div :class="$style.additional">
-          <span :class="$style.text">
-            {{ $tr('app.upload.text.additional1') }}: <b>{{ currentFolder ? `/${currentFolder}` : 'Home' }}</b>
-          </span>
-
-          <div :class="$style.additionalInfo">
-            <span v-ui3n-html="$tr('app.upload.text.additional2')" />&nbsp;
-            <ui3n-input-file
-              multiple
-              :button-text="$tr('app.upload.file.text')"
-              @update:model-value="onFilesSelect"
-            />
-          </div>
-        </div>
-      </template>
-    </ui3n-drop-files>
-  </div>
+    </template>
+  </ui3n-dialog>
 </template>
 
 <style lang="scss" module>

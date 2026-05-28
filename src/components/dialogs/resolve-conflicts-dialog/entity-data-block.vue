@@ -137,6 +137,7 @@
     justify-content: flex-start;
     align-items: center;
     column-gap: var(--spacing-s);
+    color: var(--color-text-control-primary-default);
   }
 
   .title {
@@ -161,6 +162,7 @@
   .info {
     position: relative;
     flex-grow: 1;
+    color: var(--color-text-control-primary-default);
   }
 
   .entity {

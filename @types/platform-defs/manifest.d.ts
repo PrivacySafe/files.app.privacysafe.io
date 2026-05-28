@@ -256,6 +256,7 @@ declare namespace web3n.caps {
 		connectivity?: ConnectivityCAPSetting;
 		mediaDevices?: MediaDevicesCAPSetting;
 		webrtc?: WebRTCCAPSetting;
+		connectToExternal?: ExternalConnectCAPSetting;
 	}
 
 	type AppsCAPSetting = 'all' | ('opener' | 'downloader' | 'installer')[];
@@ -314,6 +315,16 @@ declare namespace web3n.caps {
 	}
 
 	type WebRTCCAPSetting = 'all';
+
+	interface ExternalConnectCAPSetting {
+		fetch?: URLWhitelistEntry[];
+	}
+
+	interface URLWhitelistEntry {
+		schema: 'https' | 'ws';
+		domain: string;
+		pathPrefix?: string;
+	}
 
 	interface SiteManifest {
 		siteDomain: string;

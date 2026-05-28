@@ -19,13 +19,21 @@ import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import hasIn from 'lodash/hasIn';
 import isEmpty from 'lodash/isEmpty';
-import { useAppStore, useFsStore, useSyncQueueStore } from '@/store';
+import { useAppStore, useFsStore, useSyncQueueStore, useFavoriteStore } from '@/store';
 import { DIALOGS_KEY, VUEBUS_KEY, type DialogsPlugin, type VueBusPlugin } from '@v1nt1248/3nclient-lib/plugins';
 import type { Ui3nResizeCbArg } from '@v1nt1248/3nclient-lib';
 import { SystemSettings } from '@/utils/ui-settings';
 import { makeServiceCaller } from '@shared/utils/ipc/ipc-service-caller';
-import { AppGlobalEvents, StorageEvent, StorageUpdateQueueEvent } from '@shared/types';
-import type { StorageService } from '../../src-deno/storage-deno';
+import {
+  AppGlobalEvents,
+  StorageConnectionStatusEvent,
+  StorageEventPayloadWithPath,
+  StorageFavoritesUpdateEvent,
+} from '@shared/types';
+import type { StorageAppDenoService } from '@deno/types';
+import forEach from 'lodash/forEach';
+import { appStorageSrv } from '@/services/services-provider.ts';
+import { STUCK_SYNCHRONIZATION_TIME_CHECKING } from '@shared/constants';
 
 export function useAppView() {
   const { t } = useI18n();
@@ -42,19 +50,25 @@ export function useAppView() {
     getAppVersion,
     getUser,
     getConnectivityStatus,
+    setConnectivityStatus,
     setLang,
     setColorTheme,
     setAppWindowSize,
     setCustomLogo,
   } = appStore;
 
+  const syncQueueStore = useSyncQueueStore();
+  const { downloadProcesses, uploadProcesses, syncQueue } = storeToRefs(syncQueueStore);
   const {
-    synchronizationQueueInitialProcess,
     onUpdateQueue,
+    onUpsertQueueItem,
+    onRemoveQueueItem,
     upsertProcess,
     removeProcess,
     getRootFolderSyncStatus,
-  } = useSyncQueueStore();
+  } = syncQueueStore;
+
+  const { setFavoriteFolderListValue } = useFavoriteStore();
 
   const appElement = ref<HTMLDivElement | null>(null);
 
@@ -76,6 +90,8 @@ export function useAppView() {
       }
     }
   });
+
+  w3n.connectivity?.isOnline().then(res => setConnectivityStatus(res.includes('online')));
 
   async function appExit() {
     w3n.closeSelf!();
@@ -104,6 +120,7 @@ export function useAppView() {
     setAppWindowSize({ width: value.width, height: value.contentHeight });
   }
 
+  let st1: ReturnType<typeof setInterval>;
   onBeforeMount(async () => {
     try {
       await fsStore.initializeFsItems();
@@ -113,8 +130,6 @@ export function useAppView() {
       await getAppConfig();
       await getConnectivityStatus();
       await getAppStorageSettings();
-
-      connectivityTimerId.value = setInterval(getConnectivityStatus, 60000);
 
       const config = await SystemSettings.makeResourceReader();
       config.watchConfig({
@@ -127,36 +142,58 @@ export function useAppView() {
       });
 
       const storageSrvConnection = await w3n.rpc!.thisApp!('AppStorageInternal');
-      const storageSrv = makeServiceCaller(storageSrvConnection, [], ['watchEvent']) as StorageService;
+      const storageSrv = makeServiceCaller(storageSrvConnection, [], ['watchEvent']) as StorageAppDenoService;
       storageSrv.watchEvent({
         next: async eventObj => {
-          console.log('🔔 WATCH EVENT FROM DENO => ', eventObj);
+          if (eventObj.event !== 'connectivity:change') {
+            console.log('🔔 WATCH EVENT FROM DENO => ', JSON.stringify(eventObj));
+          }
+
           const { event, payload } = eventObj;
           const path = hasIn(payload, 'path')
-            ? (payload as Exclude<StorageEvent['payload'], StorageUpdateQueueEvent['payload']>).path === '.'
+            ? (payload as StorageEventPayloadWithPath).path === '.'
               ? ''
-              : (payload as Exclude<StorageEvent['payload'], StorageUpdateQueueEvent['payload']>).path.replace(
-                  './',
-                  '',
-                )
+              : (payload as StorageEventPayloadWithPath).path.replace('./', '')
             : null;
 
           switch (event) {
-            case 'initial-sync:start': {
-              isFillingUpSyncQueue.value = true;
+            case 'connectivity:change': {
+              const { isOnline } = payload as StorageConnectionStatusEvent['payload'];
+              setConnectivityStatus(isOnline);
               break;
             }
 
-            case 'initial-sync:end': {
-              isFillingUpSyncQueue.value = false;
+            case 'favorites:update': {
+              const { favorites } = payload as StorageFavoritesUpdateEvent['payload'];
+              setFavoriteFolderListValue(favorites);
               break;
             }
 
-            case 'queue:update': {
-              onUpdateQueue(payload);
-              if (isEmpty(payload)) {
-                isFillingUpSyncQueue.value = false;
-              }
+            case 'sync_queue:update': {
+              const { syncQueue } = payload;
+              onUpdateQueue(Object.values(syncQueue));
+              isFillingUpSyncQueue.value = !isEmpty(syncQueue.value);
+              break;
+            }
+
+            case 'sync_queue:item:add': {
+              const { item } = payload;
+              onUpsertQueueItem(item);
+              isFillingUpSyncQueue.value = !isEmpty(syncQueue.value);
+              break;
+            }
+
+            case 'sync_queue:item:remove': {
+              const { path } = payload;
+              onRemoveQueueItem(path);
+              isFillingUpSyncQueue.value = !isEmpty(syncQueue.value);
+              break;
+            }
+
+            case 'sync_queue:item:update': {
+              const { item } = payload;
+              onUpsertQueueItem(item);
+              isFillingUpSyncQueue.value = !isEmpty(syncQueue.value);
               break;
             }
 
@@ -171,7 +208,7 @@ export function useAppView() {
             }
             case 'upload:end': {
               removeProcess({ action: 'upload', path: path! });
-              if (!path && typeof path === 'string') {
+              if ((!path && typeof path === 'string') || path === 'root') {
                 await getRootFolderSyncStatus('root');
               } else if (path && path === fsStore.trashFolderName) {
                 await getRootFolderSyncStatus('trash');
@@ -201,7 +238,7 @@ export function useAppView() {
 
             case 'adoptRemote:end': {
               removeProcess({ action: 'adoptRemote', path: path! });
-              if (!path && typeof path === 'string') {
+              if ((!path && typeof path === 'string') || path === 'root') {
                 await getRootFolderSyncStatus('root');
               } else if (path && path === fsStore.trashFolderName) {
                 await getRootFolderSyncStatus('trash');
@@ -213,13 +250,17 @@ export function useAppView() {
             }
 
             case 'arose:conflict': {
-              if (!path && typeof path === 'string') {
+              if ((!path && typeof path === 'string') || path === 'root') {
                 await getRootFolderSyncStatus('root');
               } else if (path && path === fsStore.trashFolderName) {
                 await getRootFolderSyncStatus('trash');
               }
 
-              if ((!path && typeof path === 'string') || (path && path === fsStore.trashFolderName)) {
+              if (
+                (!path && typeof path === 'string') ||
+                path === 'root' ||
+                (path && path === fsStore.trashFolderName)
+              ) {
                 const component = defineAsyncComponent(
                   () => import('@/components/dialogs/resolve-conflicts-dialog/resolve-conflicts-dialog.vue'),
                 );
@@ -251,11 +292,26 @@ export function useAppView() {
         complete: () => storageSrvConnection.close(),
       });
 
-      if (connectivityStatus.value === 'online') {
-        synchronizationQueueInitialProcess().then(() => {
-          $emitter.emit('complete:sync-srv-init', void 0);
+      st1 = setInterval(() => {
+        console.log('[*] Checking that there are no "stuck" synchronization operations [*]');
+        forEach(Object.fromEntries(uploadProcesses.value), async (data, path) => {
+          const { lastUpdate } = data;
+          const diff = Date.now() - lastUpdate;
+          if (diff > STUCK_SYNCHRONIZATION_TIME_CHECKING) {
+            removeProcess({ action: 'upload', path });
+            await appStorageSrv.deleteSyncQueueItem(path);
+          }
         });
-      }
+
+        forEach(Object.fromEntries(downloadProcesses.value), async (data, path) => {
+          const { lastUpdate } = data;
+          const diff = Date.now() - lastUpdate;
+          if (diff > STUCK_SYNCHRONIZATION_TIME_CHECKING) {
+            removeProcess({ action: 'download', path });
+            await appStorageSrv.deleteSyncQueueItem(path);
+          }
+        });
+      }, 60000);
     } catch (e) {
       console.error('🔥 Error while mounted the app. ', e);
       throw e;
@@ -274,6 +330,10 @@ export function useAppView() {
     if (connectivityTimerId.value) {
       clearInterval(connectivityTimerId.value);
     }
+
+    if (st1) {
+      clearInterval(st1);
+    }
   });
 
   return {
@@ -281,6 +341,7 @@ export function useAppView() {
     appVersion,
     me,
     customLogoSrc,
+    connectivityStatus,
     connectivityStatusText,
     commonLoading,
     isFillingUpSyncQueue,

@@ -1,5 +1,5 @@
 <!--
- Copyright (C) 2024 - 2025 3NSoft Inc.
+ Copyright (C) 2024 - 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -29,6 +29,7 @@
   import type { FsTableRowProps, FsTableRowEmits } from './types';
   import FileType from '@/components/common/file-type/file-type.vue';
   import FsEntitySyncStatus from '@/components/common/fs-entity-sync-status/fs-entity-sync-status.vue';
+  import { USER_FS } from '@shared/constants';
 
   const props = defineProps<FsTableRowProps<keyof ListingEntryExtended>>();
   const emits = defineEmits<FsTableRowEmits>();
@@ -47,7 +48,13 @@
   const { uploadProcesses, downloadProcesses, adoptProcesses } = storeToRefs(useSyncQueueStore());
 
   const isRowFromSyncedFsTable = computed(() => props.rootFolderId.includes('synced'));
-  const isFsEntryInProcessing = computed(() => uploadProcesses.value.has(props.row.fullPath) || downloadProcesses.value.has(props.row.fullPath) || adoptProcesses.value.has(props.row.fullPath));
+  const isFsEntryInProcessing = computed(
+    () =>
+      (uploadProcesses.value.has(props.row.fullPath) ||
+        downloadProcesses.value.has(props.row.fullPath) ||
+        adoptProcesses.value.has(props.row.fullPath)) &&
+      props.fsId === USER_FS,
+  );
 
   const fileExtension = computed(() => {
     if (props.row.type !== 'file') {
@@ -58,7 +65,9 @@
     return size(value) > 5 ? '' : value;
   });
 
-  const isAvailableFavoriteActions = computed(() => props.row.type === 'folder' && !props.disabled && canSetUnsetFavorite(props.fsId, props.rootFolderId));
+  const isAvailableFavoriteActions = computed(
+    () => props.row.type === 'folder' && !props.disabled && canSetUnsetFavorite(props.fsId, props.rootFolderId),
+  );
 
   const { openFile } = useFsStore();
 
@@ -135,8 +144,9 @@
       $style.fsTableRow,
       !!row.brokeReason && $style.damaged,
       displayedFsEntityInfo?.fsId === fsId && displayedFsEntityInfo?.path === row.fullPath && $style.highlight,
-      (disabled || readonly || (isFsEntryInProcessing && appStore.connectivityStatus === 'online')) && $style.fsTableRowDisabled,
-      isDroppable && $style.droppable
+      (disabled || readonly || (isFsEntryInProcessing && appStore.connectivityStatus === 'online')) &&
+        $style.fsTableRowDisabled,
+      isDroppable && $style.droppable,
     ]"
     :draggable="!editNameMode && canCopyMove(rootFolderId)"
     @click="handleDblClick"
@@ -244,7 +254,9 @@
       v-if="isAvailableFavoriteActions && !isFsEntryInProcessing && !row.brokeReason"
       icon="round-bookmark"
       size="12"
-      :color="row.favoriteId ? 'var(--color-icon-table-accent-selected)' : 'var(--color-icon-table-accent-unselected)'"
+      :color="
+        row.favoriteId ? 'var(--color-icon-table-accent-selected)' : 'var(--color-icon-table-accent-unselected)'
+      "
       :class="[$style.favoriteIcon, row.favoriteId && $style.favoriteIconSelected]"
       @click.stop="updateFavorite"
     />
@@ -360,7 +372,6 @@
     right: 4px;
   }
 
-
   .type {
     display: flex;
     padding: 0 var(--spacing-xs);
@@ -368,4 +379,3 @@
     align-items: center;
   }
 </style>
-

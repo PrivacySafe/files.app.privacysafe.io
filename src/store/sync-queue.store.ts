@@ -14,21 +14,30 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
-import { appStorageSrv } from '@/services/services-provider';
 import { useFsStore } from '@/store/fs.store';
 import { USER_FS } from '@shared/constants';
-import type { SyncQueueElement } from '@shared/types';
+import type { SyncQueueItem } from '@shared/types';
 
 export const useSyncQueueStore = defineStore('sync-queue', () => {
   const fsStore = useFsStore();
 
-  const uploadProcesses = ref<Map<string, number>>(new Map());
-  const downloadProcesses = ref<Map<string, number>>(new Map());
+  const syncQueue = ref<Map<string, SyncQueueItem>>(new Map());
+
+  const uploadProcesses = ref<Map<string, { progress: number; lastUpdate: number }>>(new Map());
+  const downloadProcesses = ref<Map<string, { progress: number; lastUpdate: number }>>(new Map());
   const adoptProcesses = ref<Map<string, boolean>>(new Map());
   const rootFolderSyncStatus = ref<web3n.files.SyncStatus | undefined>(undefined);
   const trashFolderSyncStatus = ref<web3n.files.SyncStatus | undefined>(undefined);
+
+  const syncQueueList = computed(() => {
+    const list = {} as Record<string, SyncQueueItem>;
+    syncQueue.value.forEach((v, k) => {
+      list[k] = v;
+    });
+    return list;
+  });
 
   async function getRootFolderSyncStatus(type: 'root' | 'trash'): Promise<void> {
     const fs = fsStore.getFs(USER_FS);
@@ -39,57 +48,25 @@ export const useSyncQueueStore = defineStore('sync-queue', () => {
     }
   }
 
-  function onAddQueueItem(item: SyncQueueElement) {
-    console.log('📝 ON ADD QUEUE ITEM: ', item);
-    const [action, path = ''] = item.split(':');
-    switch (action) {
-      case 'upload':
-        uploadProcesses.value.set(path, 0);
-        break;
-      case 'download':
-        downloadProcesses.value.set(path, 0);
-        break;
-      case 'adoptRemote':
-        adoptProcesses.value.set(path, true);
-        break;
-    }
+  function onUpsertQueueItem(item: SyncQueueItem) {
+    const { path } = item;
+    syncQueue.value.set(path, item);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  function onRemoveQueueItem(item: SyncQueueElement) {
-    console.log('🗑 ON REMOVE QUEUE ITEM: ', item);
-    const [action, path = ''] = item.split(':');
-    switch (action) {
-      case 'upload':
-        uploadProcesses.value.has(path) && uploadProcesses.value.delete(path);
-        break;
-      case 'download':
-        downloadProcesses.value.has(path) && downloadProcesses.value.delete(path);
-        break;
-      case 'adoptRemote':
-        adoptProcesses.value.has(path) && adoptProcesses.value.delete(path);
-        break;
-    }
+  function onRemoveQueueItem(path: string) {
+    syncQueue.value.delete(path);
   }
 
-  function onUpdateQueue(val: SyncQueueElement[] = []) {
+  function onUpdateQueue(val: SyncQueueItem[] = []) {
     uploadProcesses.value.clear();
     downloadProcesses.value.clear();
     adoptProcesses.value.clear();
 
+    syncQueue.value.clear();
     for (const item of val) {
-      onAddQueueItem(item);
+      const { path } = item;
+      syncQueue.value.set(path, item);
     }
-    console.log(
-      '📝 UPDATE QUEUE ITEM: ',
-      JSON.stringify([...uploadProcesses.value]),
-      JSON.stringify([...downloadProcesses.value]),
-      JSON.stringify([...adoptProcesses.value]),
-    );
-  }
-
-  function synchronizationQueueInitialProcess() {
-    return appStorageSrv.synchronizationQueueInitialProcess();
   }
 
   function upsertProcess({
@@ -101,26 +78,26 @@ export const useSyncQueueStore = defineStore('sync-queue', () => {
     path: string;
     value: number | boolean;
   }) {
-    console.log('📝 UPSERT PROCESS: ', action, path, value);
+    // console.log('📝 UPSERT PROCESS: ', action, path, value);
     switch (action) {
       case 'upload':
-        uploadProcesses.value.set(path, value as number);
+        uploadProcesses.value.set(path, { progress: value as number, lastUpdate: Date.now() });
         break;
       case 'download':
-        downloadProcesses.value.set(path, value as number);
+        downloadProcesses.value.set(path, { progress: value as number, lastUpdate: Date.now() });
         break;
       case 'adoptRemote':
         adoptProcesses.value.set(path, value as boolean);
         break;
     }
-    console.log(
-      `🚀 ${action.toUpperCase()} PROCESSING [${path}] => `,
-      uploadProcesses.value.get(path) || downloadProcesses.value.get(path) || adoptProcesses.value.get(path),
-    );
+    // console.log(
+    //   `🚀 ${action.toUpperCase()} PROCESSING [${path}] => `,
+    //   uploadProcesses.value.get(path) || downloadProcesses.value.get(path) || adoptProcesses.value.get(path),
+    // );
   }
 
   function removeProcess({ action, path }: { action: 'upload' | 'download' | 'adoptRemote'; path: string }) {
-    console.log('🗑 REMOVE PROCESS: ', action, path);
+    // console.log('🗑 REMOVE PROCESS: ', action, path);
     switch (action) {
       case 'upload':
         uploadProcesses.value.delete(path);
@@ -132,20 +109,23 @@ export const useSyncQueueStore = defineStore('sync-queue', () => {
         adoptProcesses.value.delete(path);
         break;
     }
-    console.log(
-      `🚀 ${action.toUpperCase()} PROCESSING [${path}] => `,
-      uploadProcesses.value.has(path) || downloadProcesses.value.has(path) || adoptProcesses.value.has(path),
-    );
+    // console.log(
+    //   `🚀 ${action.toUpperCase()} PROCESSING [${path}] => `,
+    //   uploadProcesses.value.has(path) || downloadProcesses.value.has(path) || adoptProcesses.value.has(path),
+    // );
   }
 
   return {
+    syncQueue,
+    syncQueueList,
     rootFolderSyncStatus,
     trashFolderSyncStatus,
     uploadProcesses,
     downloadProcesses,
     adoptProcesses,
     getRootFolderSyncStatus,
-    synchronizationQueueInitialProcess,
+    onUpsertQueueItem,
+    onRemoveQueueItem,
     onUpdateQueue,
     upsertProcess,
     removeProcess,

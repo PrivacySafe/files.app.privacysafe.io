@@ -14,7 +14,7 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import { executeFunc } from '@shared/utils/execute-function';
+import { getReadonlyFile, getReadonlySubRoot, readLink, saveFile, saveFolder } from '@shared/utils/fs-utils';
 import type { ListingEntryExtended } from '@shared/types';
 
 export async function downloadEntities({
@@ -36,33 +36,17 @@ export async function downloadEntities({
       const { name, type, fullPath } = entity;
       switch (type) {
         case 'folder': {
-          const folder = await executeFunc({
-            fn: fs.readonlySubRoot,
-            fnArgs: [fullPath],
-          });
+          const folder = await getReadonlySubRoot({ fs, folder: fullPath, stopErrorPropagate: true });
           folder && (await targetFs.saveFolder(folder, name));
           break;
         }
         case 'file': {
-          const file = await executeFunc({
-            fn: fs.readonlyFile,
-            fnArgs: [fullPath],
-            timeoutValue: 0,
-          });
-          file &&
-            (await executeFunc({
-              fn: targetFs.saveFile,
-              fnArgs: [file, name],
-              timeoutValue: 0,
-            }));
+          const file = await getReadonlyFile({ fs, path: fullPath, stopErrorPropagate: true });
+          file && (await saveFile({ fs: targetFs, file, dst: name }));
           break;
         }
         case 'link': {
-          const link = await executeFunc({
-            fn: fs.readLink,
-            fnArgs: [fullPath],
-            errorText: `Error while link reading ${fullPath}`,
-          });
+          const link = await readLink({ fs, path: fullPath, stopErrorPropagate: true });
           if (!link) {
             throw new Error(`Error while link reading ${fullPath}`);
           }
@@ -70,18 +54,12 @@ export async function downloadEntities({
           const data = await link.target();
 
           if (link.isFolder) {
-            await executeFunc({
-              fn: targetFs.saveFolder,
-              fnArgs: [data as web3n.files.ReadonlyFS, name],
-            });
+            await saveFolder({ fs: targetFs, folder: data as web3n.files.ReadonlyFS, dst: name });
             return;
           }
 
           if (link.isFile) {
-            await executeFunc({
-              fn: targetFs.saveFile,
-              fnArgs: [data as web3n.files.ReadonlyFile, name],
-            });
+            await saveFile({ fs: targetFs, file: data as web3n.files.ReadonlyFile, dst: name });
           }
         }
       }

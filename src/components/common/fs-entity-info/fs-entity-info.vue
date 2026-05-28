@@ -19,13 +19,21 @@
   import { useI18n } from 'vue-i18n';
   import dayjs from 'dayjs';
   import isEmpty from 'lodash/isEmpty';
-  import { type Nullable, Ui3nButton, Ui3nChip, Ui3nIcon, Ui3nProgressCircular, Ui3nClickOutside } from '@v1nt1248/3nclient-lib';
+  import {
+    type Nullable,
+    Ui3nButton,
+    Ui3nChip,
+    Ui3nIcon,
+    Ui3nProgressCircular,
+    Ui3nClickOutside,
+  } from '@v1nt1248/3nclient-lib';
   import { formatFileSize, isFileImage, isFileVideo } from '@v1nt1248/3nclient-lib/utils';
   import { useFsStore } from '@/store';
   import { useFileHashing } from './useFileHashing';
   import { createThumbnail } from '@/utils';
   import type { FsSEntityInfoProps, FsSEntityInfoEmits } from './types';
   import type { ListingEntryExtended } from '@shared/types';
+  import type { EntitySyncStatus } from '@deno/types.ts';
 
   const vUi3nClickOutside = Ui3nClickOutside;
 
@@ -37,7 +45,7 @@
 
   const isLoading = ref(false);
   const entityStats = ref<Nullable<ListingEntryExtended & { thumbnail?: string }>>(null);
-  const entitySyncStatus = ref<web3n.files.SyncStatus>({} as web3n.files.SyncStatus);
+  const entitySyncStatus = ref<EntitySyncStatus>({} as EntitySyncStatus);
 
   const fsIdValue = computed(() => props.fsId);
   const pathValue = computed(() => props.path);
@@ -54,14 +62,17 @@
     stopHashingProcess,
   } = useFileHashing(fsIdValue, pathValue, entityStats);
 
-  const canHash = computed(() => entityStats.value?.type === 'file'
-    && entityStats.value?.mtime
-    && (typeof entityStats.value?.size === 'number'),
+  const canHash = computed(
+    () =>
+      entityStats.value?.type === 'file' &&
+      entityStats.value?.mtime &&
+      typeof entityStats.value?.size === 'number',
   );
 
-  const iconStyle = computed(() => !entityStats.value?.thumbnail
-    ? { backgroundColor: 'var(--color-bg-control-secondary-default)' }
-    : { backgroundImage: `url(${entityStats.value!.thumbnail})` },
+  const iconStyle = computed(() =>
+    !entityStats.value?.thumbnail
+      ? { backgroundColor: 'var(--color-bg-control-secondary-default)' }
+      : { backgroundImage: `url(${entityStats.value!.thumbnail})` },
   );
 
   const entityType = computed(() => {
@@ -116,7 +127,7 @@
   async function loadEntity(fullPath: string) {
     try {
       isLoading.value = true;
-      entityStats.value = await getEntityStats({ fsId: props.fsId, fullPath }) || null;
+      entityStats.value = (await getEntityStats({ fsId: props.fsId, fullPath })) || null;
       if (canHash.value) {
         await loadHashing();
       }
@@ -129,24 +140,23 @@
     () => props.path,
     async (val, oVal) => {
       if (val && val !== oVal) {
-
         stopHashingProcess();
         await loadEntity(val);
 
         if (props.fsId.includes('synced')) {
           const sStatus = await getSyncedStatus({ fsId: props.fsId, fullPath: val });
-          entitySyncStatus.value = sStatus || {} as web3n.files.SyncStatus;
+          entitySyncStatus.value = sStatus || ({} as EntitySyncStatus);
         }
 
         const { type, thumbnail, ext } = entityStats.value!;
         if (
-          type === 'file' && !thumbnail && (
-            isFileImage({ fullName: props.path.toLowerCase() })
-            || isFileVideo({ fullName: props.path.toLowerCase() })
-            || ext === 'pdf'
-          )
+          type === 'file' &&
+          !thumbnail &&
+          (isFileImage({ fullName: props.path.toLowerCase() }) ||
+            isFileVideo({ fullName: props.path.toLowerCase() }) ||
+            ext === 'pdf')
         ) {
-          createThumbnail(props.fsId, props.path).then((val) => {
+          createThumbnail(props.fsId, props.path).then(val => {
             if (val) {
               entityStats.value!.thumbnail = val;
             }
@@ -258,7 +268,9 @@
       >
         <span>{{ t('fs.entity.info.status') }}</span>
         <section>
-          <p>state: <i>{{ entitySyncStatus?.state }}</i></p>
+          <p>
+            state: <i>{{ entitySyncStatus?.state }}</i>
+          </p>
 
           <p v-if="entitySyncStatus?.local">
             local ver: <i>{{ entitySyncStatus?.local.latest }}</i>

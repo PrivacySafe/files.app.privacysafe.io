@@ -173,7 +173,7 @@
           <div :class="$style.favoritesContent">
             <favorite-list-item
               v-for="item in processedFavoriteFolders"
-              :key="item.id"
+              :key="item.favId"
               :item="item"
               @go="goToFavoriteFolder"
             />
@@ -239,7 +239,7 @@
             v-if="displayedFsEntityInfo"
             :class="[
               $style.info,
-              displayedFsEntityInfo.window === '2' && $style.left,
+              displayedFsEntityInfo.windowIndex === '2' && $style.left,
               isSplittedMode && $style.splitMode,
             ]"
           >

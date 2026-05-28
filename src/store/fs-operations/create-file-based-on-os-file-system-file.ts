@@ -26,9 +26,8 @@ import { fileTypeFromBuffer } from 'file-type';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
 import { appStorageSrv } from '@/services/services-provider';
 import { createPdfThumbnail, getFileArray } from '@/utils';
-import { executeFunc } from '@shared/utils/execute-function';
 import { USER_FS, USER_LOCAL_FS } from '@shared/constants';
-import { getFileExtension } from '../../../src-deno/fs-service/utils';
+import { getFileExtension } from '../../../shared/utils/various';
 
 async function createThumbnailForFileFromOs(
   uploadedFile: File & { path?: string },
@@ -87,30 +86,22 @@ export async function createFileBaseOnOsFileSystemFile({
     const isThereFileWithSameName = await fs.checkFilePresence(fullFilePath);
     const newFullFileName = isThereFileWithSameName ? `${folderPath}/${fileName}_copy.${fileExt}` : fullFilePath;
 
-    await executeFunc({
-      fn: fs.writeBytes,
-      fnArgs: [newFullFileName, byteArray],
-    });
+    await fs.writeBytes(newFullFileName, byteArray);
 
-    const { img, ext, mime } = await createThumbnailForFileFromOs(uploadedFile, byteArray);
 
     if (fsId === USER_FS || USER_LOCAL_FS) {
-      await executeFunc({
-        fn: fs.updateXAttrs,
-        fnArgs: [
-          newFullFileName,
-          {
-            set: {
-              id: getRandomId(24),
-              ext,
-              mime,
-              ...(withThumbnail && img && { thumbnail: img }),
-            },
-          },
-        ],
-      });
+      const { img, ext, mime } = await createThumbnailForFileFromOs(uploadedFile, byteArray);
 
-      fsId === USER_FS && (await appStorageSrv.startSyncUpload(newFullFileName));
+      await appStorageSrv.updateEntityXAttrs({
+        fsId,
+        path: newFullFileName,
+        attrs: {
+          id: getRandomId(24),
+          ext,
+          mime,
+          ...(withThumbnail && img && { thumbnail: img }),
+        },
+      });
     }
   } catch (e) {
     if (!(e as web3n.files.FSSyncException).childNeverUploaded) {

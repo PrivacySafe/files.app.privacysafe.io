@@ -32,20 +32,25 @@
   } from '@v1nt1248/3nclient-lib';
   import { getFileExtension } from '@v1nt1248/3nclient-lib/utils';
   import { useFsStore, useSyncQueueStore } from '@/store';
-  import { executeFunc } from '@shared/utils/execute-function';
+  import {
+    absorbRemoteFolderChanges as _absorbRemoteFolderChanges,
+    adoptRemoteFolderItem,
+    getFsStat,
+  } from '@shared/utils/fs-utils';
   import { appStorageSrv } from '@/services/services-provider';
   import { AUTOMATIC_DOWNLOAD_FILE_LIMIT_SIZE, USER_FS } from '@shared/constants';
-  import { getParentFolderPathFromEntityFullPath } from '../../../../src-deno/fs-service/utils';
+  import { formatPath, getParentFolderPathFromEntityFullPath } from '@shared/utils/various';
   import type { ListingEntryExtended } from '@shared/types';
   import EntityDataBlock from '@/components/dialogs/resolve-conflicts-dialog/entity-data-block.vue';
   import FolderCompareBlock from '@/components/dialogs/resolve-conflicts-dialog/folder-compare-block.vue';
+  import { EntitySyncStatus } from '@deno/types.ts';
 
   const props = defineProps<{
     paths: string[];
     dialogProps?: Ui3nDialogComponentProps<boolean>;
   }>();
   const emits = defineEmits<{
-    (event: 'action', value: { event: Ui3nDialogEvent, data: boolean }): void;
+    (event: 'action', value: { event: Ui3nDialogEvent; data?: boolean | string }): void;
   }>();
 
   const { t } = useI18n();
@@ -57,12 +62,12 @@
 
   const applyToAllObjects = ref(false);
   const currentResolvingPathIndex = ref(0);
-  const currentResolvingPath = computed(() => props.paths[currentResolvingPathIndex.value]);
+  const currentResolvingPath = computed(() => formatPath(props.paths[currentResolvingPathIndex.value]));
 
   const showCompareFolderTable = ref(false);
   const totalResolvingItems = computed(() => size(props.paths));
 
-  const syncStatus = ref<web3n.files.SyncStatus | undefined>(undefined);
+  const syncStatus = ref<EntitySyncStatus | undefined>(undefined);
   const statsLocal = ref<Nullable<ListingEntryExtended & { thumbnail?: string }> | undefined>(null);
   const statsRemote = ref<Nullable<ListingEntryExtended & { thumbnail?: string }> | undefined>(null);
   const parentFolder = ref<Nullable<string>>(null);
@@ -75,18 +80,27 @@
     }
 
     syncStatus.value = await getSyncedStatus({ fsId: USER_FS, fullPath: currentResolvingPath.value });
+    if (syncStatus.value && syncStatus.value.state !== 'conflicting') {
+      emits('action', { event: 'cancel', data: currentResolvingPath.value });
+      return;
+    }
+
+
     statsLocal.value = await getEntityStats({ fsId: USER_FS, fullPath: currentResolvingPath.value });
-    statsRemote.value = await getEntityStats({ fsId: USER_FS, fullPath: currentResolvingPath.value, version: syncStatus.value!.remote!.latest! });
+    statsRemote.value = await getEntityStats({
+      fsId: USER_FS,
+      fullPath: currentResolvingPath.value,
+      version: syncStatus.value!.remote!.latest!,
+    });
     const currentParentFolder = getParentFolderPathFromEntityFullPath(currentResolvingPath.value);
-    parentFolder.value = currentParentFolder
-      ? `Home / ${currentParentFolder.replaceAll('/', ' / ')}`
-      : 'Home ';
+    parentFolder.value = currentParentFolder ? `Home / ${currentParentFolder.replaceAll('/', ' / ')}` : 'Home ';
     console.log('SYNC STATUS => ', syncStatus.value);
     console.log('STAT LOCAL => ', statsLocal.value);
     console.log('STAT REMOTE => ', statsRemote.value);
   }
 
   async function toggleFolderCompareDisplaying() {
+    console.log('toggleFolderCompareDisplaying');
     showCompareFolderTable.value = !showCompareFolderTable.value;
   }
 
@@ -98,7 +112,7 @@
       await getRootFolderSyncStatus('trash');
     }
 
-    if (currentResolvingPathIndex.value === (props.paths.length - 1)) {
+    if (currentResolvingPathIndex.value === props.paths.length - 1) {
       emits('action', { event: 'confirm', data: true });
     } else {
       currentResolvingPathIndex.value += 1;
@@ -114,11 +128,10 @@
     try {
       isProcessOngoing.value = true;
 
-      if (statsLocal.value?.type === 'file') {
-        await appStorageSrv.startSyncUpload(currentResolvingPath.value, { uploadVersion: syncStatus.value.remote.latest + 1 });
-      } else {
-        await appStorageSrv.syncUpload(currentResolvingPath.value, { uploadVersion: syncStatus.value.remote.latest + 1 });
-      }
+      await appStorageSrv.startSyncUpload({
+        path: currentResolvingPath.value,
+        opts: { uploadVersion: syncStatus.value.remote.latest + 1 },
+      });
 
       await actionAfterResolveEnd();
     } finally {
@@ -135,22 +148,28 @@
       isProcessOngoing.value = true;
 
       const fs = getFs(USER_FS);
-      if (statsLocal.value?.type === 'file') {
-        await appStorageSrv.adoptRemote(currentResolvingPath.value, { remoteVersion: syncStatus.value.remote.latest });
-        const stats = await executeFunc({
-          fn: fs.stat,
-          fnArgs: [currentResolvingPath.value],
-        });
+      await appStorageSrv.startSyncAdopt({
+        path: currentResolvingPath.value,
+        opts: { remoteVersion: syncStatus.value.remote.latest },
+      });
 
-        if (
-          stats.versionSyncBranch === 'synced' &&
-          stats.size && stats.size <= AUTOMATIC_DOWNLOAD_FILE_LIMIT_SIZE &&
-          stats.version
-        ) {
-          await appStorageSrv.startSyncDownload(currentResolvingPath.value, stats.version);
-        }
+      const stats = await getFsStat({ fs, path: currentResolvingPath.value, stopErrorPropagate: true });
+
+      const itShouldDownload =
+        stats &&
+        stats.isFile &&
+        stats.versionSyncBranch === 'synced' &&
+        stats.size &&
+        stats.size <= AUTOMATIC_DOWNLOAD_FILE_LIMIT_SIZE &&
+        stats.version;
+
+      if (itShouldDownload) {
+        await appStorageSrv.startSyncDownload({
+          path: currentResolvingPath.value,
+          version: stats.version!,
+        });
       } else {
-        await appStorageSrv.adoptRemote(currentResolvingPath.value, { remoteVersion: syncStatus.value.remote.latest });
+        await appStorageSrv.deleteSyncQueueItem(currentResolvingPath.value);
       }
 
       await actionAfterResolveEnd();
@@ -167,27 +186,32 @@
       const currentFileParentFolder = getParentFolderPathFromEntityFullPath(currentResolvingPath.value);
       const currentFileFullName = currentResolvingPath.value.replace(`${currentFileParentFolder}/`, '');
       const currentFileExt = getFileExtension(currentFileFullName);
-      const currentFileName = currentFileExt ? currentFileFullName.replace(`.${currentFileExt}`, '') : currentFileFullName;
+      const currentFileName = currentFileExt
+        ? currentFileFullName.replace(`.${currentFileExt}`, '')
+        : currentFileFullName;
       const newItemName = `${currentFileName}_[ keep ]${currentFileExt ? `.${currentFileExt}` : ''}`;
 
-      await executeFunc({
-        fn: fs.v!.sync!.adoptRemoteFolderItem,
-        fnArgs: [currentFileParentFolder, currentFileFullName, { newItemName }],
-      });
-      await appStorageSrv.syncUpload(currentFileParentFolder);
-      const stats = await executeFunc({
-        fn: fs.stat,
-        fnArgs: [currentResolvingPath.value],
+      await adoptRemoteFolderItem({
+        fs,
+        path: currentFileParentFolder,
+        remoteItemName: currentFileFullName,
+        opts: { newItemName },
+        stopErrorPropagate: true,
       });
 
+      await appStorageSrv.startSyncUpload({ path: currentFileParentFolder });
+      const stats = await getFsStat({ fs, path: currentResolvingPath.value });
+
       if (
+        stats &&
         stats.versionSyncBranch === 'synced' &&
-        stats.size && stats.size <= AUTOMATIC_DOWNLOAD_FILE_LIMIT_SIZE &&
+        stats.size &&
+        stats.size <= AUTOMATIC_DOWNLOAD_FILE_LIMIT_SIZE &&
         stats.version
       ) {
-        await executeFunc({
-          fn: appStorageSrv.startSyncDownload,
-          fnArgs: [currentResolvingPath.value, stats.version],
+        await appStorageSrv.startSyncDownload({
+          path: currentResolvingPath.value,
+          version: stats.version,
         });
       }
 
@@ -206,11 +230,16 @@
       isProcessOngoing.value = true;
 
       const fs = getFs(USER_FS);
-      await executeFunc({
-        fn: fs.v!.sync!.absorbRemoteFolderChanges,
-        fnArgs: [currentResolvingPath.value, { postfixForNameOverlaps: '_[ keep ]' }],
+      await _absorbRemoteFolderChanges({
+        fs,
+        path: currentResolvingPath.value,
+        opts: { postfixForNameOverlaps: '_[ keep ]' },
       });
-      await appStorageSrv.syncUpload(currentResolvingPath.value, { uploadVersion: syncStatus.value!.remote!.latest + 1 });
+
+      await appStorageSrv.startSyncUpload({
+        path: currentResolvingPath.value,
+        opts: { uploadVersion: syncStatus.value!.remote!.latest + 1 },
+      });
       await actionAfterResolveEnd();
     } finally {
       isProcessOngoing.value = false;
@@ -223,7 +252,10 @@
 </script>
 
 <template>
-  <ui3n-dialog v-bind="dialogProps">
+  <ui3n-dialog
+    v-bind="dialogProps"
+    @action="emits('action', $event)"
+  >
     <template #header>
       <div :class="$style.header">
         <ui3n-icon
@@ -233,7 +265,9 @@
         />
 
         <span>{{ t('dialog.resolve.title') }}</span>
-        <span v-if="totalResolvingItems > 1">&nbsp;({{ currentResolvingPathIndex }}/{{ totalResolvingItems }})</span>
+        <span v-if="totalResolvingItems > 1">
+          &nbsp;({{ currentResolvingPathIndex }}/{{ totalResolvingItems }})
+        </span>
       </div>
     </template>
 
@@ -305,7 +339,6 @@
             {{ t('dialog.resolve.btn.keep_local') }}
           </ui3n-button>
 
-
           <ui3n-button
             v-if="statsLocal?.type === 'file'"
             @click.stop.prevent="keepBothFile"
@@ -332,7 +365,10 @@
       </div>
     </template>
 
-    <template #loading>
+    <template
+      v-if="isProcessOngoing"
+      #loading
+    >
       <ui3n-progress-circular
         v-if="isProcessOngoing"
         indeterminate
@@ -358,6 +394,7 @@
     column-gap: var(--spacing-xs);
     font-size: var(--font-12);
     font-weight: 500;
+    color: var(--color-text-block-primary-default);
   }
 
   .closeBtn {

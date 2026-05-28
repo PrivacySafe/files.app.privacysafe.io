@@ -432,6 +432,7 @@
 
   .syncStatus {
     position: absolute;
+    min-width: 72px;
     top: 0;
     right: 0;
   }

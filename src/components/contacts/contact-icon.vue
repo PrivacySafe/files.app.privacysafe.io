@@ -17,7 +17,7 @@
 
 <script lang="ts" setup>
 import { computed } from 'vue';
-import { getElementColor } from '@v1nt1248/3nclient-lib/utils';
+import { generateColor } from '@v1nt1248/3nclient-lib/utils';
 import { Ui3nIcon } from '@v1nt1248/3nclient-lib';
 
 const props = defineProps<{
@@ -46,7 +46,7 @@ const mainStyle = computed<Record<string, string>>(() => {
     width: `${innerSize.value}px`,
     minHeight: `${innerSize.value}px`,
     height: `${innerSize.value}px`,
-    backgroundColor: getElementColor(letters.value || '?'),
+    backgroundColor: generateColor(letters.value || '?'),
   };
   return props.photo
     ? {

@@ -30,22 +30,30 @@ export default defineConfig(config => {
 
   const plugins = [vue(), vueDevTools()];
 
-  let optimizeDeps = {};
+  const optimizeDeps = {
+    exclude: ['pdfjs-dist'],
+    include: [] as string[],
+  };
   if (isDev) {
-    optimizeDeps = {
-      include: ['vue', 'vue-router', 'pinia', 'lodash', 'dayjs'],
-    };
+    optimizeDeps.include = ['vue', 'vue-router', 'pinia', 'lodash', 'dayjs'];
   }
 
   const build = {
     outDir: 'app',
     chunkSizeWarningLimit: 0,
+    target: 'esnext',
+    commonjsOptions: {
+      include: [/pdfjs-dist/],
+    },
   };
 
   return {
     server,
     css,
     build,
+    worker: {
+      format: 'es',
+    },
     define,
     plugins,
     optimizeDeps,
@@ -53,6 +61,7 @@ export default defineConfig(config => {
       alias: {
         vue: 'vue/dist/vue.esm-bundler.js',
         '@': _resolve('./src'),
+        '@deno': _resolve('./src_deno'),
         '@shared': _resolve('./shared'),
       },
     },

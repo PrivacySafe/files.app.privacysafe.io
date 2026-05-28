@@ -41,7 +41,7 @@ export const en = {
       },
     },
     sync: {
-      start: 'The process of initial synchronization of folders/files is in progress',
+      start: 'The process of synchronizing folders/files is in progress',
     },
     upload: 'Upload',
     upload_file: 'Upload File',
@@ -194,15 +194,17 @@ export const en = {
           delete:
             'The selected object has been successfully deleted. | The selected objects ({count}) have been successfully deleted.',
           restore:
-            'The selected object has been successfully restored. | The selected objects ({count}) have been successfully restored.',
+            'The selected objects have been successfully restored.',
           download:
             'The selected object has been successfully downloaded. | The selected objects ({count}) have been successfully downloaded.',
           copy: 'The selected object has been successfully copied. | The selected objects ({count}) have been successfully copied.',
           move: 'The selected object has been successfully moved. | The selected objects ({count}) have been successfully moved.',
         },
         error: {
-          delete: 'Error while deleting the selected object. | Error while deleting the selected objects ({count}).',
-          restore: 'Error while restoring the selected object. | Error while restoring the selected objects ({count}).',
+          delete:
+            'Error while deleting the selected object. | Error while deleting the selected objects ({count}).',
+          restore:
+            'Error while restoring the selected objects',
           download:
             'Error while downloading the selected object. | Error while downloading the selected objects ({count}).',
           copy: 'Error while copying the selected object. | Error while copying the selected objects ({count}).',

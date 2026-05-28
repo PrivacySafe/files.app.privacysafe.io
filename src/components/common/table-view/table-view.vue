@@ -42,6 +42,7 @@
   import type { FsTableBulkActionName } from '@/components/common/fs-table-bulk-actions/types';
   import FsTable from '@/components/common/fs-table/fs-table.vue';
   import TableBulkActions from '@/components/common/fs-table-bulk-actions/fs-table-bulk-actions.vue';
+  import size from 'lodash/size';
 
   const props = defineProps<{
     windowIndex: 1 | 2;
@@ -180,16 +181,20 @@
       }
 
       case 'restore': {
-        let res;
+        let restoredParentFoldersLists: string[] | undefined;
         try {
-          res = await restoreEntities({ fsId: tableFsId.value, entities });
-          if (res && res > 0) {
-            bus.$emitter.emit('refresh:data', { path: '', withoutVerify: true });
+          restoredParentFoldersLists = await restoreEntities({ fsId: tableFsId.value, entities });
+          if (size(restoredParentFoldersLists) > 0) {
+            console.log('💥 SYNC AFTER RESTORE ENTITIES 💥');
+            bus.$emitter.emit('refresh:data', { path: trashFolderName.value });
+            for (const restoredParentFolder of restoredParentFoldersLists!) {
+              bus.$emitter.emit('refresh:data', { path: restoredParentFolder });
+            }
 
             notifications.$createNotice({
               type: 'success',
               withIcon: true,
-              content: t('fs.entity.message.success.restore', { count: `${res}` }),
+              content: t('fs.entity.message.success.restore'),
             });
           }
         } catch (err) {
@@ -197,7 +202,7 @@
           notifications.$createNotice({
             type: 'error',
             withIcon: true,
-            content: t('fs.entity.message.error.restore', { count: `${res}` }),
+            content: t('fs.entity.message.error.restore'),
           });
         }
         break;
@@ -268,7 +273,7 @@
           path =>
             path === null
               ? openFsEntityInfoBlock(null)
-              : openFsEntityInfoBlock({ fsId: tableFsId, path, window: `${windowIndex}` })
+              : openFsEntityInfoBlock({ fsId: tableFsId, path, windowIndex: `${windowIndex}` })
         "
       >
         <template #group-actions="{ selectedRows }">

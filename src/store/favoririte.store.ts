@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2024-2025 3NSoft Inc.
+ Copyright (C) 2024-2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -17,10 +17,10 @@
 import { computed, ComputedRef, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { appStorageSrv } from '@/services/services-provider';
-import type { FavoriteFolder, FavoriteFolderDb } from '@shared/types';
+import type { FavoriteFolder } from '@shared/types';
 
 export const useFavoriteStore = defineStore('favorite', () => {
-  const favoriteFolders = ref<FavoriteFolderDb[]>([]);
+  const favoriteFolders = ref<FavoriteFolder[]>([]);
 
   const processedFavoriteFolders = computed(() => {
     return favoriteFolders.value.map(item => {
@@ -33,7 +33,7 @@ export const useFavoriteStore = defineStore('favorite', () => {
     });
   }) as ComputedRef<FavoriteFolder[]>;
 
-  function setFavoriteFolderListValue(value: FavoriteFolderDb[]) {
+  function setFavoriteFolderListValue(value: FavoriteFolder[]) {
     favoriteFolders.value = value;
   }
 
@@ -53,9 +53,9 @@ export const useFavoriteStore = defineStore('favorite', () => {
     fullPath: string;
   }): Promise<string | undefined> {
     try {
-      const { folderId, updatedFolderList } = await appStorageSrv.addFavorite({ fsId, fullPath });
-      favoriteFolders.value = updatedFolderList;
-      return folderId;
+      const favoriteFolder = await appStorageSrv.addFavorite(fullPath, fsId);
+      favoriteFolders.value.push(favoriteFolder);
+      return favoriteFolder.favId;
     } catch (e) {
       w3n.log('error', `Failed to add favorite folder [${fullPath}]`, e);
     }
@@ -71,7 +71,11 @@ export const useFavoriteStore = defineStore('favorite', () => {
     fullPath: string;
   }): Promise<void> {
     try {
-      favoriteFolders.value = await appStorageSrv.updateFavorite({ fsId, id, fullPath });
+      await appStorageSrv.updateFavorite({ fsId, favId: id, fullPath });
+      const index = favoriteFolders.value.findIndex(f => f.favId === id);
+      if (index >= 0) {
+        favoriteFolders.value[index] = { favId: id, fsId, fullPath };
+      }
     } catch (e) {
       w3n.log('error', `Failed to update favorite folder [${fullPath}]`, e);
     }
@@ -84,7 +88,8 @@ export const useFavoriteStore = defineStore('favorite', () => {
         return;
       }
 
-      favoriteFolders.value = await appStorageSrv.deleteFavorite(favoriteFolderId);
+      const updatedFavoriteFolders = await appStorageSrv.deleteFavorite(favoriteFolderId);
+      favoriteFolders.value = updatedFavoriteFolders || [];
     } catch (e) {
       w3n.log('error', `Failed to delete favorite folder [${favoriteFolderId}]`, e);
     }

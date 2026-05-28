@@ -29,7 +29,7 @@ import {
   USER_TRASH_FOLDER,
   USER_TRASH_LOCAL_FOLDER,
 } from '@shared/constants';
-import {
+import type {
   AppGlobalEvents,
   FavoriteFolder,
   FsEntityInfoProps,
@@ -152,7 +152,7 @@ export function useDashboard() {
 
     const parentFolder = fsAvailableFolderList.value.find(f => f.fsId === fsId && f.id.includes('-root'));
 
-    const isFolderPresent = await isEntityPresent({ fsId, entityPath: fullPath });
+    const isFolderPresent = await isEntityPresent({ fsId, path: fullPath });
 
     if (isFolderPresent && parentFolder) {
       return navigateToRouteSingle({
@@ -174,7 +174,7 @@ export function useDashboard() {
         },
       });
       if (dialogRes.event === 'confirm') {
-        const res = await removeFavoriteFolderFromList(favoriteFolder.id);
+        const res = await removeFavoriteFolderFromList(favoriteFolder.favId);
         setFavoriteFolderListValue(res || []);
       }
     }

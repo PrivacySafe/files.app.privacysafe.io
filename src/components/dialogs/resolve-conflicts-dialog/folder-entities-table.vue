@@ -27,11 +27,13 @@
 
   const { t } = useI18n();
 
-  const sortedData = computed(() => (props.data || []).sort((a, b) => {
-    const aVal = `${a.type}:${a.name}`;
-    const bVal = `${b.type}:${b.name}`;
-    return bVal > aVal ? 1 : -1;
-  }));
+  const sortedData = computed(() =>
+    (props.data || []).sort((a, b) => {
+      const aVal = `${a.type}:${a.name}`;
+      const bVal = `${b.type}:${b.name}`;
+      return bVal > aVal ? 1 : -1;
+    }),
+  );
 </script>
 
 <template>
@@ -50,24 +52,22 @@
       </div>
     </div>
 
-    <div :class="$style.body">
-      <template
-        v-for="entity in sortedData"
-        :key="entity.name"
-      >
-        <table-file-view
-          v-if="entity.type === 'file'"
-          :item="entity"
-          :level="0"
-        />
+    <template
+      v-for="entity in sortedData"
+      :key="entity.name"
+    >
+      <table-file-view
+        v-if="entity.type === 'file'"
+        :item="entity"
+        :level="0"
+      />
 
-        <table-folder-view
-          v-if="entity.type === 'folder'"
-          :item="entity"
-          :level="0"
-        />
-      </template>
-    </div>
+      <table-folder-view
+        v-if="entity.type === 'folder'"
+        :item="entity"
+        :level="0"
+      />
+    </template>
   </div>
 </template>
 
@@ -75,26 +75,40 @@
   @use '@/assets/styles/_mixins' as mixins;
 
   .folderEntitiesTable {
-    --entity-size-width: 60px;
-    --entity-date-width: 80px;
+    --entity-size-width: 80px;
+    --entity-date-width: 84px;
+    --entity-name-width: calc(100% - var(--entity-size-width) - var(--entity-date-width));
     --folder-table-header-height: 24px;
 
     position: relative;
     width: 100%;
     height: 100%;
+    display: grid;
+    grid-template-columns:
+      minmax(var(--entity-name-width), max-content)
+      var(--entity-size-width)
+      var(--entity-date-width);
+    align-items: start;
+    grid-auto-rows: max-content;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
   }
 
   .header {
-    display: flex;
-    width: calc(100% - 5px);
+    display: contents;
+    position: relative;
     height: var(--folder-table-header-height);
-    justify-content: flex-start;
-    align-items: center;
     background-color: var(--color-bg-table-header-default);
   }
 
   .headerCell {
     position: relative;
+    width: 100%;
+    height: var(--folder-table-header-height);
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    background-color: var(--color-bg-table-header-default);
     font-size: var(--font-12);
     font-weight: 600;
     line-height: 1;
@@ -102,28 +116,14 @@
   }
 
   .name {
-    flex-grow: 1;
     padding-left: var(--spacing-m);
-    @include mixins.text-overflow-ellipsis();
   }
 
   .size {
-    width: var(--entity-size-width);
-    min-width: var(--entity-size-width);
     padding-left: var(--spacing-s);
   }
 
   .date {
-    width: var(--entity-date-width);
-    min-width: var(--entity-date-width);
     padding-left: var(--spacing-s);
-  }
-
-  .body {
-    position: relative;
-    width: 100%;
-    height: calc(100% - var(--folder-table-header-height));
-    overflow-y: auto;
-    scrollbar-gutter: stable;
   }
 </style>

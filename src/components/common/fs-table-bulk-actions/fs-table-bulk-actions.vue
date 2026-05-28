@@ -127,7 +127,7 @@
         placement="top-end"
       >
         <ui3n-switch
-          :model-value="!!isMoveMode || !isMoveModeQuick"
+          :model-value="!!isMoveMode || !!isMoveModeQuick"
           :class="$style.copyMoveSwitcher"
           @update:model-value="emits('update:move-mode', $event)"
         />

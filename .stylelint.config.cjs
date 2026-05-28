@@ -35,7 +35,17 @@ module.exports = {
           'each',
           'content',
           'use',
+          'font-feature-values',
+          'character-variant',
+          'styleset',
         ],
+      },
+    ],
+    'property-no-unknown': [
+      true,
+      {
+        ignoreSelectors: ['/.*Inter.*/'],
+        ignoreAtRules: ['font-feature-values', 'character-variant', 'styleset'],
       },
     ],
     'declaration-property-value-keyword-no-deprecated': [true, { ignoreKeywords: ['break-word'] }],

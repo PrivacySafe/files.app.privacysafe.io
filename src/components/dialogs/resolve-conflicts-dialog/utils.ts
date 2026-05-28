@@ -15,9 +15,10 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import isEmpty from 'lodash/isEmpty';
-import { executeFunc } from '@shared/utils/execute-function';
+import { getListFolder, getFsStat, getRemoteFileItem, getRemoteFolderItem } from '@shared/utils/fs-utils';
 import { useAppStore } from '@/store';
 import type { FolderListItem } from './types';
+import { EntitySyncStatus } from '@deno/types.ts';
 
 function getEntryType(entry: web3n.files.ListingEntry): 'file' | 'folder' | 'link' {
   return entry.isFile ? 'file' : entry.isFolder ? 'folder' : 'link';
@@ -38,10 +39,7 @@ async function prepareLocalFolderTree({
 }): Promise<FolderListItem[]> {
   const { added = {}, removed = {}, renamed = [], nameOverlaps = [] } = diff || {};
 
-  const entries = await executeFunc({
-    fn: fs.listFolder,
-    fnArgs: [folderPath],
-  });
+  const entries = await getListFolder({ fs, folderName: folderPath, vAPI: false });
 
   const list: FolderListItem[] = [];
   if (!entries) {
@@ -71,10 +69,9 @@ async function prepareLocalFolderTree({
 
     (isInAdded || isInRemoved || isInNameOverlaps || isInRenamed) && (diversity = true);
 
-    const stats = await executeFunc({
-      fn: fs.stat,
-      fnArgs: [currentEntityFullPath],
-    });
+    const stats = await getFsStat({ fs, path: currentEntityFullPath, stopErrorPropagate: true }).catch(
+      () => undefined,
+    );
 
     const item = {
       name,
@@ -134,22 +131,23 @@ async function processRemoteFolder(
 async function prepareRemoteFolderTree({
   fs,
   folderPath,
+  syncStatus,
   diff,
   trashFolder,
 }: {
   fs: web3n.files.WritableFS | web3n.files.ReadonlyFS;
   folderPath: string;
+  syncStatus: EntitySyncStatus | undefined;
   diff?: web3n.files.FolderDiff | undefined;
   trashFolder: string;
 }): Promise<FolderListItem[]> {
   const { added = {}, removed = {}, renamed = [], nameOverlaps = [] } = diff || {};
 
-  const res = await executeFunc<
-    [string, web3n.files.VersionedReadFlags],
-    Promise<{ lst: web3n.files.ListingEntry[]; version: number }>
-  >({
-    fn: fs.v!.listFolder,
-    fnArgs: [folderPath, { remoteVersion: diff!.remoteVersion }],
+  const res = await getListFolder({
+    fs,
+    folderName: folderPath,
+    ...(syncStatus?.remote?.latest && { flags: { remoteVersion: syncStatus.remote.latest } }),
+    vAPI: true,
   });
 
   const list: FolderListItem[] = [];
@@ -162,21 +160,29 @@ async function prepareRemoteFolderTree({
 
     let diversity = false;
 
-    const isInAdded = isEmpty(added.inRemote) ? false : !!(added.inRemote || []).find(item => entity.name === item);
+    const isInAdded = isEmpty(added.inRemote)
+      ? false
+      : !!(added.inRemote || []).find(item => entity.name === item);
     const isInNameOverlaps = nameOverlaps.includes(entity.name);
     const isInRenamed = renamed.find(item => {
       const { local, renamedIn } = item;
       return ['r', 'l&r'].includes(renamedIn) && entity.name === local;
     });
-    const isInRemoved = isEmpty(removed.inLocal) ? false : !!(removed.inLocal || []).find(item => entity.name === item);
+    const isInRemoved = isEmpty(removed.inLocal)
+      ? false
+      : !!(removed.inLocal || []).find(item => entity.name === item);
 
     (isInAdded || isInRemoved || isInNameOverlaps || isInRenamed) && (diversity = true);
 
     if (isFile) {
-      const file = await executeFunc({
-        fn: fs.v!.sync!.getRemoteFileItem,
-        fnArgs: [folderPath, name, diff!.remoteVersion],
+      const file = await getRemoteFileItem({
+        fs,
+        path: folderPath,
+        remoteItemName: name,
+        ...(syncStatus?.remote?.latest && { remoteVersion: syncStatus.remote.latest  }),
+        stopErrorPropagate: true,
       });
+
       if (file) {
         const stats = await file.stat();
         list.push({
@@ -188,10 +194,14 @@ async function prepareRemoteFolderTree({
         });
       }
     } else if (isFolder) {
-      const remoteFolderFs = await executeFunc({
-        fn: fs.v!.sync!.getRemoteFolderItem,
-        fnArgs: [folderPath, name, diff!.remoteVersion],
+      const remoteFolderFs = await getRemoteFolderItem({
+        fs,
+        path: folderPath,
+        remoteItemName: name,
+        ...(syncStatus?.remote?.latest && { remoteVersion: syncStatus.remote.latest }),
+        stopErrorPropagate: true,
       });
+
       if (remoteFolderFs) {
         const stats = await remoteFolderFs.stat('');
         const treeItem = {
@@ -212,14 +222,15 @@ async function prepareRemoteFolderTree({
 export async function prepareComparativeFolderTree(
   fs: web3n.files.WritableFS,
   folderPath: string,
+  syncStatus: EntitySyncStatus | undefined,
   diff: web3n.files.FolderDiff | undefined,
 ): Promise<{ localFolderTree: FolderListItem[]; remoteFolderTree: FolderListItem[] }> {
   const appStore = useAppStore();
   const trashFolder = `.trash-folder-${appStore.user}`;
 
   const localFolderTree = await prepareLocalFolderTree({ fs, folderPath, diff, trashFolder });
-  const remoteFolderTree = await prepareRemoteFolderTree({ fs, folderPath, diff, trashFolder }).catch(e =>
-    console.error(e),
+  const remoteFolderTree = await prepareRemoteFolderTree({ fs, folderPath, syncStatus, diff, trashFolder }).catch(
+    e => console.error(e),
   );
 
   return {

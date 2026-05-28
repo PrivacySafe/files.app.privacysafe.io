@@ -25,6 +25,7 @@ import {
 } from 'vue';
 import { useI18n } from 'vue-i18n';
 import isEmpty from 'lodash/isEmpty';
+import size from 'lodash/size';
 import {
   DIALOGS_KEY,
   DialogsPlugin,
@@ -39,8 +40,6 @@ import { useSort } from '@/composables/useSort';
 import { useAppStore, useFsStore, useRunModeInfoStore } from '@/store';
 import { type AppGlobalEvents, FsFolderEntityEvent, ListingEntryExtended } from '@shared/types';
 import type { FsTableBulkActionName } from '@/components/common/fs-table-bulk-actions/types';
-import { prepareFolderPath } from '@/utils';
-import isEqual from 'lodash/isEqual';
 
 export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
   const { t } = useI18n();
@@ -55,7 +54,6 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
   const { deleteSelectedEntities } = runModeInfoStore;
 
   const {
-    getFolderContentList,
     getFolderContentFilledList,
     downloadEntities,
     renameEntity,
@@ -104,21 +102,6 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
       basePath,
       operatingSystem: appStore.operatingSystem,
     });
-  }
-
-  async function processAfterCompleteSyncSrvInitialization() {
-    const fullFolderPath = prepareFolderPath([
-      currentWindowRootFolderBasePath.value,
-      currentWindowFolderPath.value,
-    ]);
-    const folderList = await getFolderContentList({ fsId: currentWindowFsId.value!, path: fullFolderPath });
-    const folderEntities = folderList.map(item => item.name).sort();
-    const displayingFolderEntities = (fsFolderData.value || [])
-      .map((item: ListingEntryExtended) => item.fullPath)
-      .sort();
-    if (!isEqual(folderEntities, displayingFolderEntities)) {
-      await loadFolderData();
-    }
   }
 
   async function refreshData({ path, withoutVerify }: { path: string; withoutVerify?: boolean }): Promise<void> {
@@ -260,7 +243,7 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
         let res;
         try {
           res = await restoreEntities({ fsId: currentWindowFsId.value as string, entities });
-          if (res && res > 0) {
+          if (size(res) > 0) {
             const entitiesParentFolders = entities.map(e => e.parentFolder);
             const isCurrentProcessedPathParent = entitiesParentFolders.find(
               p => p === currentWindowFolderPath.value,
@@ -268,10 +251,12 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
             if (isCurrentProcessedPathParent) {
               bus.$emitter.emit('refresh:data', { path: currentWindowFolderPath.value });
             }
+            bus.$emitter.emit('refresh:data', { path: appStore.trashFolderName });
+
             notifications.$createNotice({
               type: 'success',
               withIcon: true,
-              content: t('fs.entity.message.success.restore', { count: res }),
+              content: t('fs.entity.message.success.restore', { count: size(res) }),
             });
           }
         } catch (err) {
@@ -279,7 +264,7 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
           notifications.$createNotice({
             type: 'error',
             withIcon: true,
-            content: t('fs.entity.message.error.restore', { count: res }),
+            content: t('fs.entity.message.error.restore', { count: size(res) }),
           });
         }
         break;
@@ -299,7 +284,6 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
     bus.$emitter.on('upload:file', loadFolderData);
     bus.$emitter.on('refresh:data', refreshData);
     bus.$emitter.on('drag:end', clearSelection);
-    bus.$emitter.on('complete:sync-srv-init', processAfterCompleteSyncSrvInitialization);
   });
 
   onBeforeUnmount(() => {
@@ -307,7 +291,6 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
     bus.$emitter.off('upload:file', loadFolderData);
     bus.$emitter.off('refresh:data', refreshData);
     bus.$emitter.off('drag:end', clearSelection);
-    bus.$emitter.off('complete:sync-srv-init', processAfterCompleteSyncSrvInitialization);
   });
 
   return {

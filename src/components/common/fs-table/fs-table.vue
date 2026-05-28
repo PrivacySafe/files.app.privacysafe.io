@@ -19,8 +19,6 @@
   import { useI18n } from 'vue-i18n';
   import size from 'lodash/size';
   import isEmpty from 'lodash/isEmpty';
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  import isEqual from 'lodash/isEqual';
   import cloneDeep from 'lodash/cloneDeep';
   import { VUEBUS_KEY, VueBusPlugin } from '@v1nt1248/3nclient-lib/plugins';
   import {
@@ -36,8 +34,6 @@
   import { useAbilities } from '@/composables/useAbilities';
   import { useFsTable } from './useFsTable';
   import { useAppStore, useFsStore, useFavoriteStore } from '@/store';
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  import { prepareFolderPath } from '@/utils';
   import type { AppGlobalEvents, ListingEntryExtended, FsFolderEntityEvent } from '@shared/types';
   import type { FsTableProps, FsTableEmits, FsTableSlots } from './types';
   import type { FsTableRowProps } from '@/components/common/fs-table-row/types';
@@ -71,14 +67,7 @@
 
   const appStore = useAppStore();
 
-  const {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    getFolderContentList,
-    getFolderContentFilledList,
-    setFolderAsFavorite,
-    unsetFolderAsFavorite,
-    renameEntity,
-  } = useFsStore();
+  const { getFolderContentFilledList, setFolderAsFavorite, unsetFolderAsFavorite, renameEntity } = useFsStore();
 
   const { setFavoriteFolderListValue } = useFavoriteStore();
 
@@ -149,7 +138,9 @@
       }
 
       case 'rename': {
-        if (isTrashFolderInCurrentWindow.value || isSystemFolderInCurrentWindow.value) return;
+        if (isTrashFolderInCurrentWindow.value || isSystemFolderInCurrentWindow.value) {
+          return;
+        }
 
         const { row, newName } = payload as { row: ListingEntryExtended; newName: string };
         await renameEntity({ fsId: props.fsId, entity: row, newName });
@@ -200,21 +191,14 @@
     }
   }
 
-  async function processAfterCompleteSyncSrvInitialization() {
-    // ToDo
-    // const fullFolderPath = prepareFolderPath([props.basePath.fullPath, props.path]);
-    // const folderList = await getFolderContentList({ fsId: props.fsId, path: fullFolderPath });
-    // const folderEntities = folderList.map(item => item.name).sort();
-    // const displayingFolderEntities = (folderData.value?.body?.content || []).map((item: ListingEntryExtended) => item.fullPath).sort();
-    // if (!isEqual(folderEntities, displayingFolderEntities)) {
-    //   await loadFolderData();
-    // }
-  }
-
   async function refreshData({ path, withoutVerify }: { path: string; withoutVerify?: boolean }): Promise<void> {
-    console.log('   REFRESH DATA => ', ...arguments);
-    console.log('   REFRESH DATA:PATH => ', props.path);
-    if (path === props.path || withoutVerify) {
+    const currentFolderFullPath =
+      props.basePath.fullPath && props.path
+        ? `${props.basePath.fullPath}/${props.path}`
+        : props.basePath.fullPath || props.path;
+
+    console.log(`   REFRESH DATA '${currentFolderFullPath}' => `, ...arguments);
+    if (path === currentFolderFullPath || withoutVerify) {
       await loadFolderData();
     }
   }
@@ -248,13 +232,10 @@
   }
 
   onBeforeMount(async () => {
-    await loadFolderData();
-
     bus.$emitter.on('create:folder', loadFolderData);
     bus.$emitter.on('upload:file', loadFolderData);
     bus.$emitter.on('refresh:data', refreshData);
     bus.$emitter.on('drag:end', closeGroupActionsRow);
-    bus.$emitter.on('complete:sync-srv-init', processAfterCompleteSyncSrvInitialization);
   });
 
   onBeforeUnmount(() => {
@@ -262,7 +243,6 @@
     bus.$emitter.off('upload:file', loadFolderData);
     bus.$emitter.off('refresh:data', refreshData);
     bus.$emitter.off('drag:end', closeGroupActionsRow);
-    bus.$emitter.off('complete:sync-srv-init', processAfterCompleteSyncSrvInitialization);
   });
 
   watch(
@@ -281,6 +261,9 @@
       if (rootFolderIdVal !== rootFolderIdOldVal || pathVal !== pathOvalVal) {
         await loadFolderData();
       }
+    },
+    {
+      immediate: true,
     },
   );
 

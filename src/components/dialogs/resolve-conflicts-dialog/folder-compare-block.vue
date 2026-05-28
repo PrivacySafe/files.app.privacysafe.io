@@ -19,17 +19,17 @@
   import { Ui3nProgressCircular } from '@v1nt1248/3nclient-lib';
   import { useFsStore } from '@/store';
   import { prepareComparativeFolderTree } from './utils';
-  import { executeFunc } from '@shared/utils/execute-function';
   import { USER_FS } from '@shared/constants';
   import type { ListingEntryExtended } from '@shared/types';
   import type { FolderListItem } from './types';
   import EntityDataBlock from './entity-data-block.vue';
   import FolderEntitiesTable from './folder-entities-table.vue';
+  import { EntitySyncStatus } from '@deno/types.ts';
 
   const props = defineProps<{
     path: string;
     parentFolder: string;
-    syncStatus: web3n.files.SyncStatus | undefined;
+    syncStatus: EntitySyncStatus | undefined;
     statsLocal: ListingEntryExtended & { thumbnail?: string };
     statsRemote: ListingEntryExtended & { thumbnail?: string };
   }>();
@@ -44,11 +44,15 @@
   onMounted(async () => {
     try {
       isProcessing.value = true;
-      const folderDiff = await executeFunc({
-        fn: fs.v!.sync!.diffCurrentAndRemoteFolderVersions,
-        fnArgs: [props.path, props.syncStatus?.remote?.latest],
-      });
-      const { localFolderTree, remoteFolderTree } = await prepareComparativeFolderTree(fs, props.path, folderDiff);
+      const folderDiff = await fs
+        .v!.sync!.diffCurrentAndRemoteFolderVersions(props.path, props.syncStatus?.remote?.latest)
+        .catch(() => undefined);
+      const { localFolderTree, remoteFolderTree } = await prepareComparativeFolderTree(
+        fs,
+        props.path,
+        props.syncStatus,
+        folderDiff,
+      );
       localFolder.value = localFolderTree;
       remoteFolder.value = remoteFolderTree;
     } finally {
@@ -131,7 +135,7 @@
     position: relative;
     width: 50%;
     height: 100%;
-    padding: 0 2px 0 var(--spacing-s);
+    padding: 0 var(--spacing-s);
   }
 
   .blockHeader {
@@ -145,9 +149,7 @@
     position: relative;
     width: 100%;
     height: calc(100% - var(--block-header-height));
-    overflow: auto;
-    scrollbar-gutter: stable;
-    @include mixins.scrollbar-horizontal();
+    overflow-x: auto;
 
     & > div {
       padding-left: var(--spacing-xs) !important;
@@ -155,6 +157,20 @@
       & > div {
         padding-left: 0 !important;
       }
+    }
+
+    :global(::-webkit-scrollbar) {
+      height: 6px;
+    }
+
+    :global(::-webkit-scrollbar-track) {
+      background-color: var(--color-bg-block-primary-default);
+    }
+
+    :global(::-webkit-scrollbar-thumb) {
+      background-color: var(--color-bg-control-accent-default);
+      border-radius: 4px;
+      min-width: 48px;
     }
   }
 </style>

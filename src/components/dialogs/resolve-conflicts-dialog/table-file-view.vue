@@ -41,7 +41,7 @@
         v-ui3n-title="{
           text: item.name,
           bgColor: 'var(--color-bg-block-tritery-default)',
-          color: 'var(--color-text-block-darkery-default)'
+          color: 'var(--color-text-block-darkery-default)',
         }"
       >
         {{ item.name }}
@@ -66,14 +66,10 @@
     --file-row-height: 32px;
 
     position: relative;
-    display: flex;
-    width: 100%;
+    display: contents;
     height: var(--file-row-height);
     justify-content: flex-start;
     align-items: center;
-    border-left: 1px solid var(--color-border-table-primary-pressed);
-    border-right: 1px solid var(--color-border-table-primary-pressed);
-    border-bottom: 1px solid var(--color-border-table-primary-pressed);
 
     &.highlight {
       background-color: var(--success-fill-default);
@@ -81,19 +77,25 @@
   }
 
   .rowCell {
+    position: relative;
+    width: 100%;
+    height: var(--file-row-height);
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
     font-size: var(--font-10);
     font-weight: 600;
     line-height: 1;
     color: var(--color-text-table-primary-default);
+    border-left: 1px solid var(--color-border-table-primary-pressed);
+    border-right: 1px solid var(--color-border-table-primary-pressed);
+    border-bottom: 1px solid var(--color-border-table-primary-pressed);
   }
 
   .name {
-    flex-grow: 1;
-    display: flex;
-    justify-content: flex-start;
-    align-items: center;
     column-gap: var(--spacing-xs);
     padding-left: calc(var(--spacing-m) + var(--file-level) * 8px);
+    padding-right: var(--spacing-s);
 
     span {
       display: block;

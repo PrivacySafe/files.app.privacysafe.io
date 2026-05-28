@@ -16,7 +16,16 @@
 -->
 <script lang="ts" setup>
   import { useI18n } from 'vue-i18n';
-  import { Ui3nDialogProvider, Ui3nButton, Ui3nIcon, Ui3nMenu, Ui3nResize, Ui3nRipple, Ui3nProgressCircular, Ui3nProgressLinear } from '@v1nt1248/3nclient-lib';
+  import {
+    Ui3nDialogProvider,
+    Ui3nButton,
+    Ui3nIcon,
+    Ui3nMenu,
+    Ui3nResize,
+    Ui3nRipple,
+    Ui3nProgressCircular,
+    Ui3nProgressLinear,
+  } from '@v1nt1248/3nclient-lib';
   import prLogo from '@/assets/images/privacysafe-logo-new.svg';
   import { useAppView } from '@/composables/useAppView';
   import ContactIcon from '@/components/contacts/contact-icon.vue';
@@ -30,6 +39,7 @@
     appElement,
     appVersion,
     me,
+    connectivityStatus,
     connectivityStatusText,
     customLogoSrc,
     commonLoading,
@@ -129,7 +139,7 @@
       </div>
 
       <div
-        v-if="isFillingUpSyncQueue"
+        v-if="isFillingUpSyncQueue && connectivityStatus === 'online'"
         :class="$style.syncInfo"
       >
         <div :class="$style.syncInfoText">

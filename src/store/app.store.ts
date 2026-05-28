@@ -31,14 +31,14 @@ import type {
 } from '@shared/types';
 import { blobFromDataURL } from '@/utils/image-files';
 import { APP_SETTINGS_DEFAULT } from '@shared/constants';
-import { loadConfigFile, saveConfigFile } from '../../src-deno/actions-with-app-config.ts';
+import { appStorageSrv } from '@/services/services-provider';
 
 export const useAppStore = defineStore('app', () => {
   const appVersion = ref<string>('');
   const connectivityStatus = ref<string>('offline');
   const user = ref<Nullable<string>>(null);
   const lang = ref<AvailableLanguage>('en');
-  const colorTheme = ref<AvailableColorTheme>('default');
+  const colorTheme = ref<AvailableColorTheme>('dark2');
   const customLogoSrc = ref<string>();
   const appWindowSize = ref<{ width: number; height: number }>({
     width: 0,
@@ -65,6 +65,10 @@ export const useAppStore = defineStore('app', () => {
       const parsedStatus = status.split('_');
       connectivityStatus.value = parsedStatus[0] as ConnectivityStatus;
     }
+  }
+
+  function setConnectivityStatus(value: boolean) {
+    connectivityStatus.value = value ? 'online' : 'offline';
   }
 
   async function getUser() {
@@ -127,8 +131,7 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function getAppStorageSettings(): Promise<StorageAppConfig> {
-    const appFs = await w3n.storage!.getAppLocalFS();
-    const data = await loadConfigFile(appFs);
+    const data = await appStorageSrv.loadConfigFile();
     if (data) {
       Object.keys(APP_SETTINGS_DEFAULT).forEach(field => {
         if (hasIn(data, field)) {
@@ -144,12 +147,11 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function setAppStorageSettings<K extends keyof StorageAppSettings>(field: K, value: StorageAppSettings[K]) {
-    const appFs = await w3n.storage!.getAppLocalFS();
     const appStorageConfig = await getAppStorageSettings();
 
     appStorageSettings.value[field] = value;
     appStorageConfig[field] = value;
-    await saveConfigFile(appFs, appStorageConfig);
+    await appStorageSrv.saveConfigFile(appStorageConfig);
   }
 
   return {
@@ -167,6 +169,7 @@ export const useAppStore = defineStore('app', () => {
     getAppVersion,
     getConnectivityStatus,
     getUser,
+    setConnectivityStatus,
     setAppWindowSize,
     setCommonLoading,
     setLang,

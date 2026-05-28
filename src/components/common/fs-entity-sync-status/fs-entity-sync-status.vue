@@ -24,6 +24,7 @@
   import { useAppStore, useSyncQueueStore } from '@/store';
   import { styleByStatus } from './constants';
   import type { ListingEntryExtended } from '@shared/types';
+  import type { EntitySyncStatus } from '@deno/types.ts';
 
   const props = defineProps<{
     lockChanges?: boolean;
@@ -43,30 +44,38 @@
   const { uploadProcesses, downloadProcesses, adoptProcesses } = storeToRefs(syncQueueStore);
   const { upsertProcess, removeProcess } = syncQueueStore;
 
-  const fsEntitySyncStatus = ref<web3n.files.SyncStatus | undefined>(undefined);
+  const fsEntitySyncStatus = ref<EntitySyncStatus | undefined>(undefined);
 
-  const syncStatusInner = ref<Nullable<web3n.files.SyncState | 'remote'>>(null);
+  const syncStatusInner = ref<Nullable<EntitySyncStatus['state']>>(null);
   const syncStatusInProgress = ref(false);
 
   const path = computed(() => props.row.fullPath);
-  const entityType = computed(() => props.row.type);
   const syncStatus = computed(() => props.row.sync);
-  const isFsEntryInProcessing = computed(() => uploadProcesses.value.has(props.row.fullPath) || downloadProcesses.value.has(props.row.fullPath) || adoptProcesses.value.has(props.row.fullPath)) as ComputedRef<boolean>;
+  const isFsEntryInProcessing = computed(
+    () =>
+      uploadProcesses.value.has(props.row.fullPath) ||
+      downloadProcesses.value.has(props.row.fullPath) ||
+      adoptProcesses.value.has(props.row.fullPath),
+  ) as ComputedRef<boolean>;
 
   const currentSyncStatus = computed(() => syncStatusInner.value || syncStatus.value);
   const style = computed(() => {
-    return currentSyncStatus.value ? styleByStatus[currentSyncStatus.value] : undefined
+    return currentSyncStatus.value ? styleByStatus[currentSyncStatus.value] : undefined;
   });
-  const textStyle = computed(() => ({ color: style.value?.color || 'var(--color-text-control-secondary-default)' }));
+  const textStyle = computed(() => ({
+    color: style.value?.color || 'var(--color-text-control-secondary-default)',
+  }));
 
-  const showProgress = computed(() => (syncStatusInProgress.value || isFsEntryInProcessing.value) && appStore.connectivityStatus === 'online');
+  const showProgress = computed(
+    () => (syncStatusInProgress.value || isFsEntryInProcessing.value) && appStore.connectivityStatus === 'online',
+  );
 
   async function uploadLocal() {
     if (props.row.brokeReason) {
       return;
     }
 
-    await appStorageSrv.startSyncUpload(path.value);
+    await appStorageSrv.startSyncUpload({ path: path.value });
   }
 
   async function adoptRemote() {
@@ -75,7 +84,11 @@
     }
 
     upsertProcess({ action: 'adoptRemote', path: path.value, value: true });
-    appStorageSrv.adoptRemote(path.value, { remoteVersion: fsEntitySyncStatus.value.remote.latest })
+    appStorageSrv
+      .startSyncAdopt({
+        path: path.value,
+        opts: { remoteVersion: fsEntitySyncStatus.value.remote.latest },
+      })
       .then(() => {
         removeProcess({ action: 'adoptRemote', path: path.value });
       });
@@ -87,7 +100,12 @@
     }
 
     const entrySyncStatus = await appStorageSrv.getSyncedStatus({ fsId: props.fsId, fullPath: path.value });
-    entrySyncStatus?.synced && await appStorageSrv.startSyncDownload(path.value, entrySyncStatus.synced!.latest!);
+    if (entrySyncStatus?.synced) {
+      await appStorageSrv.startSyncDownload({
+        path: path.value,
+        version: entrySyncStatus.synced!.latest!,
+      });
+    }
   }
 
   async function resolveConflict() {
@@ -95,8 +113,10 @@
       return;
     }
 
-    const component = defineAsyncComponent(() => import('@/components/dialogs/resolve-conflicts-dialog/resolve-conflicts-dialog.vue'));
-    await $openDialog<boolean>(component, {
+    const component = defineAsyncComponent(
+      () => import('@/components/dialogs/resolve-conflicts-dialog/resolve-conflicts-dialog.vue'),
+    );
+    const res = await $openDialog<boolean | string>(component, {
       paths: [path.value],
       dialogProps: {
         title: '',
@@ -108,11 +128,20 @@
         closeOnClickOverlay: false,
       },
     });
-    emits('refresh-data');
+
+    if (res) {
+      console.log('[###] CONFLICT RESOLVING RES => ', JSON.stringify(res), ' <> ', props.row.fullPath);
+      const { event, data } = res;
+      if (event === 'confirm') {
+        emits('refresh-data');
+      } else if (event === 'cancel' && typeof data === 'string' && props.row.fullPath === data) {
+        getSyncStatus();
+      }
+    }
   }
 
   async function getSyncStatus() {
-    // console.log(`# GET SYNC STATUS FOR [${path.value}] | FS_ID ${props.fsId} `);
+    // console.log(`# GET SYNC STATUS FOR [${path.value}] | FS_ID ${props.fsId} | CONNECTIVITY ${appStore.connectivityStatus}`);
     if (appStore.connectivityStatus === 'offline') {
       setTimeout(() => {
         getSyncStatus();
@@ -120,28 +149,25 @@
       return;
     }
 
-    if (!props.fsId.includes('sync')) {
-      return;
-    }
-
     try {
       syncStatusInProgress.value = true;
-      fsEntitySyncStatus.value = await appStorageSrv.getSyncedStatus({ fsId: props.fsId, fullPath: path.value });
+      fsEntitySyncStatus.value = await appStorageSrv.getSyncedStatus({
+        fsId: props.fsId,
+        fullPath: path.value,
+        stopErrorPropagate: true,
+      });
       if (fsEntitySyncStatus.value) {
-        let currentStatus: Nullable<web3n.files.SyncState | 'remote'> = null;
-        if (fsEntitySyncStatus.value.state === 'synced' && entityType.value === 'file') {
-          const isRemoteEntityOnDisk = await appStorageSrv.isRemoteVersionOnDisk({
-            fsId: props.fsId,
-            fullPath: path.value,
-            version: fsEntitySyncStatus.value.synced!.latest!,
+        syncStatusInner.value = fsEntitySyncStatus.value.state;
+
+        if (['unsynced', 'behind'].includes(syncStatusInner.value)) {
+          await appStorageSrv.addSyncQueueItem({
+            path: path.value,
+            status: 'pending',
+            attempts: 0,
+            lastError: '',
+            lastChanged: Date.now(),
           });
-
-          currentStatus = isRemoteEntityOnDisk === 'complete' ? 'synced' : 'remote';
-        } else {
-          currentStatus = fsEntitySyncStatus.value.state;
         }
-
-        syncStatusInner.value = currentStatus;
       }
     } catch (e) {
       if ((e as web3n.ConnectException).type !== 'connect') {
@@ -158,7 +184,8 @@
       if (!lcVal && !processFlagVal) {
         getSyncStatus();
       }
-    }, {
+    },
+    {
       immediate: true,
     },
   );
@@ -255,14 +282,14 @@
           v-if="uploadProcesses.has(row.fullPath)"
           :class="$style.progressValue"
         >
-          {{ ((uploadProcesses.get(row.fullPath) || 0) * 100).toFixed(1) }}%
+          {{ ((uploadProcesses.get(row.fullPath)?.progress || 0) * 100).toFixed(1) }}%
         </span>
 
         <span
           v-if="downloadProcesses.has(row.fullPath)"
           :class="$style.progressValue"
         >
-          {{ ((downloadProcesses.get(row.fullPath) || 0) * 100).toFixed(1) }}%
+          {{ ((downloadProcesses.get(row.fullPath)?.progress || 0) * 100).toFixed(1) }}%
         </span>
       </template>
     </div>

@@ -21,7 +21,7 @@ import isEmpty from 'lodash/isEmpty';
 import size from 'lodash/size';
 import { useNavigation } from '@/composables/useNavigation';
 import { useAppStore, useFsStore } from '@/store';
-import { getParentPath } from '@shared/utils/fs-utils';
+import { getEntityNameAndParent } from '@shared/utils/fs-utils';
 import type { ListingEntryExtended, RouteDouble, RouteSingle } from '@shared/types';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
 
@@ -42,7 +42,7 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
 
   const fsStore = useFsStore();
   const { fsFolderList } = storeToRefs(fsStore);
-  const { deleteEntity, copyMoveEntities } = fsStore;
+  const { deleteEntities, copyMoveEntities } = fsStore;
 
   const isDragging = ref(false);
   const isMoveMode = ref(false);
@@ -124,17 +124,9 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
     try {
       setCommonLoading(true);
       if (!isEmpty(entities)) {
-        for (let i = 0; i < entities.length; i++) {
-          const whetherStartSync = i === entities.length - 1;
-          await deleteEntity({ fsId, entity: entities[i], completely, withoutSync: !whetherStartSync });
-        }
-
-        if (completely) {
-          $emitter.emit('refresh:data', { path: '', withoutVerify: false });
-        } else {
-          const parentFolder = getParentPath(entities[0].fullPath);
-          $emitter.emit('refresh:data', { path: parentFolder });
-        }
+        await deleteEntities({ fsId, entities, completely });
+        const { parentFolder } = getEntityNameAndParent(entities[0].fullPath);
+        $emitter.emit('refresh:data', { path: parentFolder || '' });
       }
     } finally {
       setCommonLoading(false);
@@ -163,24 +155,35 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
       return;
     }
 
+    const moveMode = isMoveMode.value || isMoveModeQuick.value;
+
     try {
       setCommonLoading(true);
+      console.log('⭐ IS MOVE MODE => ', moveMode);
+      console.log('⭐ INFO [TARGET] => ', JSON.stringify(target));
 
       await copyMoveEntities({
         sourceFsId: sourceFsId!,
         entities: data!,
         targetFsId: targetFsId!,
         target: target!,
-        moveMode: isMoveMode.value || isMoveModeQuick.value,
+        moveMode: moveMode,
       });
 
       $emitter.emit('drag:end', void 0);
       $emitter.emit('refresh:data', { path: target.fullPath });
 
-      const successMessage =
-        isMoveMode.value || isMoveModeQuick.value
-          ? t('fs.entity.message.success.move', { count: size(data) })
-          : t('fs.entity.message.success.copy', { count: size(data) });
+      console.log('⭐ INFO [DATA] => ', JSON.stringify(data));
+
+      if (moveMode && !isEmpty(data)) {
+        const { parentFolder: sourceFolder } = getEntityNameAndParent(data![0].fullPath);
+        console.log(`⭐ I'm here ⭐`);
+        $emitter.emit('refresh:data', { path: sourceFolder });
+      }
+
+      const successMessage = moveMode
+        ? t('fs.entity.message.success.move', { count: size(data) })
+        : t('fs.entity.message.success.copy', { count: size(data) });
 
       $createNotice({
         type: 'success',
@@ -190,10 +193,9 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
     } catch (e) {
       console.error(e);
 
-      const errorMessage =
-        isMoveMode.value || isMoveModeQuick.value
-          ? t('fs.entity.message.error.move', { count: size(data) })
-          : t('fs.entity.message.error.copy', { count: size(data) });
+      const errorMessage = moveMode
+        ? t('fs.entity.message.error.move', { count: size(data) })
+        : t('fs.entity.message.error.copy', { count: size(data) });
 
       $createNotice({
         type: 'error',

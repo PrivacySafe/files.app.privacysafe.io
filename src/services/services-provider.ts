@@ -15,30 +15,85 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 import { makeServiceCaller } from '@shared/utils/ipc/ipc-service-caller';
-import type { StorageService } from '../../src-deno/storage-deno';
+import type { StorageAppDenoService } from '@deno/types';
 
-export let appStorageSrv: StorageService;
+function showMessage() {
+  const mainContainer = document.getElementById('main');
+  console.log('[MAIN] => ', mainContainer);
+  if (!mainContainer) {
+    w3n?.closeSelf();
+    return;
+  }
+
+  mainContainer.innerHTML = `
+    <div
+      style="
+        display: flex;
+        width: 100vw;
+        height: 100vh;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        row-gap: 16px;
+        padding: 24px;
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 16px;
+        font-weight: 500;
+        line-height: 24px;
+        text-align: center;
+        color: rgba(0, 0, 0, 0.87);
+      "
+    >
+      <span>Oops...</span>
+      <span>Something went wrong 🙁.</span>
+      <span>The app will close in 10 seconds.</span>
+      <span>Please try again later.</span>
+    </div>
+  `;
+
+  setTimeout(() => {
+    w3n?.closeSelf();
+  }, 15000);
+}
+
+export let appStorageSrv: StorageAppDenoService;
 
 export async function initializationServices() {
   try {
     const srvConnection = await w3n.rpc!.thisApp!('AppStorageInternal');
-    appStorageSrv = makeServiceCaller<StorageService>(srvConnection, [
-      'getFs',
+    appStorageSrv = makeServiceCaller<StorageAppDenoService>(srvConnection, [
+      'getTrashFolderName',
+      'loadConfigFile',
+      'saveConfigFile',
+
       'getFavorites',
+      'getFavorite',
       'addFavorite',
       'updateFavorite',
       'deleteFavorite',
 
+      'getFsItem',
+      'getFsList',
+      'getFsRootFolderList',
       'initializeFsItems',
-      'getTrashFolderName',
 
-      'synchronizationQueueInitialProcess',
-      'syncUpload',
+      'getSyncQueue',
+      'isSyncQueueItemPresence',
+      'addSyncQueueItem',
+      'updateSyncQueueItem',
+      'deleteSyncQueueItem',
+      'clearSubtreeFromQueue',
+      'resetItemAttempts',
       'startSyncUpload',
       'startSyncDownload',
-      'adoptRemote',
+      'startSyncAdopt',
+
+      'setFolderAsFavorite',
+      'unsetFolderAsFavorite',
+      'removeFavoriteFolderFromList',
 
       'isEntityPresent',
+      'getEntityXAttrs',
       'updateEntityXAttrs',
       'deleteEntityXAttrs',
       'getEntityStats',
@@ -47,20 +102,18 @@ export async function initializationServices() {
       'makeFolder',
       'getFolderContentList',
       'getFolderContentFilledList',
+      'copyEntities',
       'moveEntity',
       'moveEntities',
-      'copyEntities',
       'copyMoveEntities',
       'renameEntity',
-      'deleteEntity',
-      'restoreEntity',
-      'setFolderAsFavorite',
-      'unsetFolderAsFavorite',
-      'removeFavoriteFolderFromList',
-    ]) as StorageService;
+      'deleteEntities',
+      'restoreEntities',
+    ]) as StorageAppDenoService;
 
     console.info('<- SERVICES ARE INITIALIZED ->');
   } catch (e) {
     console.error('# ERROR WHILE SERVICES INITIALISE # ', e);
+    showMessage();
   }
 }

@@ -26,8 +26,9 @@
       "@/*": ["./src/*"],
       "@deno/*": ["./src_deno/*"],
       "@shared/*": ["./shared/*"],
-    },
+      "@picker/*": ["./src-file-picker/*"]
+    }
   },
-  "include": ["vite.config.ts", "src/**/*", "shared/**/*", "@types/**/*"],
-  "exclude": ["public", "app", "node_modules/.deno"],
+  "include": ["vite.config.ts", "src/**/*", "shared/**/*", "@types/**/*", "src-file-picker/**/*"],
+  "exclude": ["public", "app", "node_modules/.deno"]
 }

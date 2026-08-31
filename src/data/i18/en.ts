@@ -127,6 +127,19 @@ export const en = {
       text: 'There is already an object named "{name}" in this folder | There are already objects named "{name}" in this folder',
       question: 'Do you want to replace it? | Do you want to replace them?',
     },
+    file_exist: {
+      title: 'File already exists',
+      placeholder: {
+        new_name: 'New file name',
+      },
+      warning: 'already exists in this folder. Overwrite it, or choose a different name?',
+      button: {
+        rename: 'Rename',
+        cancel: '@:dialog.button.cancel',
+        change: 'Change',
+        overwrite: 'Overwrite',
+      },
+    },
   },
 
   folder_banner: {
@@ -193,8 +206,7 @@ export const en = {
         success: {
           delete:
             'The selected object has been successfully deleted. | The selected objects ({count}) have been successfully deleted.',
-          restore:
-            'The selected objects have been successfully restored.',
+          restore: 'The selected objects have been successfully restored.',
           download:
             'The selected object has been successfully downloaded. | The selected objects ({count}) have been successfully downloaded.',
           copy: 'The selected object has been successfully copied. | The selected objects ({count}) have been successfully copied.',
@@ -203,8 +215,7 @@ export const en = {
         error: {
           delete:
             'Error while deleting the selected object. | Error while deleting the selected objects ({count}).',
-          restore:
-            'Error while restoring the selected objects',
+          restore: 'Error while restoring the selected objects',
           download:
             'Error while downloading the selected object. | Error while downloading the selected objects ({count}).',
           copy: 'Error while copying the selected object. | Error while copying the selected objects ({count}).',
@@ -236,6 +247,32 @@ export const en = {
       button: {
         confirm: 'Delete Completely',
       },
+    },
+  },
+  file_picker: {
+    header: {
+      select_file: 'Select Files',
+      save_file: 'Save Files',
+    },
+    message_status: {
+      loading: 'Loading...',
+      load_error: "Couldn't load this folder.",
+    },
+    button: {
+      cancel: '@:dialog.button.cancel',
+      select: 'Select',
+      save: 'Save',
+    },
+    selected_items: 'Items selected',
+    sidebar_title: 'Browse',
+    tab_3n_storage: '3N Storage',
+    notification: {
+      error: {
+        invalid_filename: 'Invalid file name: file name cannot contain "/" or "\\"',
+      },
+    },
+    footer: {
+      save_as: 'Save as',
     },
   },
 };

@@ -45,6 +45,21 @@ export default defineConfig(config => {
     commonjsOptions: {
       include: [/pdfjs-dist/],
     },
+    rolldownOptions: {
+      input: {
+        main: _resolve('./index.html'),
+        'file-picker': _resolve('./index-file-picker.html'),
+        'file-picker-mobile': _resolve('./index-file-picker-mobile.html'),
+      },
+      output: {
+        entryFileNames: 'assets/[name].js',
+        chunkFileNames: 'assets/[name].js',
+        assetFileNames: 'assets/[name].[ext]',
+      },
+      treeshake: {
+        manualPureFunctions: ['console.log'],
+      },
+    },
   };
 
   return {
@@ -63,6 +78,7 @@ export default defineConfig(config => {
         '@': _resolve('./src'),
         '@deno': _resolve('./src_deno'),
         '@shared': _resolve('./shared'),
+        '@picker': _resolve('./src-file-picker'),
       },
     },
   };

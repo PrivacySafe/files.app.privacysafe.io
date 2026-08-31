@@ -1,0 +1,12 @@
+allowBuilds:
+  '@parcel/watcher': true
+  electron: true
+  esbuild: true
+  utf-8-validate: true
+  vue-demi: true
+onlyBuiltDependencies:
+  - '@parcel/watcher'
+  - electron
+  - esbuild
+  - utf-8-validate
+  - vue-demi

@@ -2,7 +2,7 @@
   import { ref, computed } from 'vue';
   import {
     Ui3nDialog,
-    Ui3nIcon,
+    Ui3nButton,
     Ui3nInput,
     type Ui3nDialogComponentProps,
     type Ui3nDialogEvent,
@@ -28,11 +28,13 @@
   });
 
   function handleConfirm() {
-    if (!hasChanged.value) return;
+    if (!hasChanged.value) {
+      return;
+    }
     emits('action', { event: 'confirm', data: newName.value.trim() });
   }
 
-  function handleClose() {
+  function handleCancel() {
     emits('action', { event: 'cancel' });
   }
 </script>
@@ -52,21 +54,23 @@
           @enter="handleConfirm"
         />
       </div>
+    </template>
+    <template #actions>
       <div :class="$style.actionRow">
-        <ui3n-icon
-          icon="round-close"
-          :size="25"
-          color="var(--error-content-default)"
-          :class="$style.actionIcon"
-          @click="handleClose"
-        />
-        <ui3n-icon
-          icon="round-check"
-          :size="25"
-          :color="hasChanged ? 'var(--success-content-default)' : 'var(--color-icon-control-secondary-default)'"
-          :class="[$style.actionIcon, { [$style.disabled]: !hasChanged }]"
+        <ui3n-button
+          type="custom"
+          color="var(--color-bg-button-tritery-default)"
+          @click="handleCancel"
+        >
+          {{ t('dialog.file_exist.button.cancel') }}
+        </ui3n-button>
+
+        <ui3n-button
+          :disabled="!hasChanged"
           @click="handleConfirm"
-        />
+        >
+          {{ t('dialog.file_exist.button.change') }}
+        </ui3n-button>
       </div>
     </template>
   </ui3n-dialog>
@@ -76,22 +80,16 @@
   .body {
     padding: 7px 17px;
   }
+
   .nameInput {
     width: 100%;
     padding-bottom: 0px;
   }
+
   .actionRow {
     display: flex;
-    gap: var(--spacing-m);
+    gap: var(--spacing-s);
     justify-content: flex-end;
     padding: 14px;
-  }
-  .actionIcon {
-    cursor: pointer;
-  }
-  .disabled {
-    cursor: not-allowed;
-    pointer-events: none;
-    opacity: 0.5;
   }
 </style>

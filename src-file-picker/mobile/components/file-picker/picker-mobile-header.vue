@@ -3,8 +3,11 @@
   import { Ui3nButton, Ui3nIcon } from '@v1nt1248/3nclient-lib';
   import { DIALOGS_KEY, type DialogsPlugin } from '@v1nt1248/3nclient-lib/plugins';
   import { usePickerState } from '@picker/common/composables/usePickerState';
-  import { DIALOG_REQUEST_KEY } from '@picker/common/capability-bridge/dialog-request-bridge';
+  import { DIALOG_REQUEST_KEY } from '@picker/common/dialog-capabilities';
+  import type { PickerTableRow } from '@picker/common/types';
   import { useI18n } from 'vue-i18n';
+
+  const props = defineProps<{ selectedRows: PickerTableRow[] }>();
 
   const { t } = useI18n();
 
@@ -16,16 +19,16 @@
   const isSaveMode = computed(() => dialogRequest?.mode === 'saveFile');
 
   const displayTitle = computed(() => {
-    if (isSaveMode.value) return `Save as ${picker.saveFileName.value || 'Untitled'}`;
-
-    const count = picker.selected.value.size;
-    if (count === 0) return dialogRequest?.title || t('file_picker.header.select_file');
-    if (count === 1) {
-      const [id] = picker.selected.value;
-      const entry = picker.currentWindow.value.entries.find(e => e.id === id);
-      return entry?.name ?? dialogRequest?.title ?? t('file_picker.header.select_file');
+    if (isSaveMode.value) {
+      const name = picker.saveFileName.value;
+      return name ? `${t('file_picker.footer.save_as')} ${name}` : t('file_picker.header.save_file');
     }
-    return `${count} items selected`;
+
+    const count = props.selectedRows.length;
+    if (count === 0) return dialogRequest?.title || t('file_picker.header.select_file');
+    if (count === 1)
+      return props.selectedRows[0].name || dialogRequest?.title || t('file_picker.header.select_file');
+    return `${count} ${t('file_picker.selected_items')}`;
   });
 
   async function openRenameDialog() {
@@ -34,7 +37,7 @@
     const result = await dialogs.$openDialog(component, {
       data: picker.saveFileName.value,
       dialogProps: {
-        title: 'Rename file',
+        title: t('dialog.file_exist.button.rename'),
         cssStyle: { maxHeight: '95%' },
         closeOnClickOverlay: false,
         confirmButton: false,
@@ -42,7 +45,6 @@
       },
     });
 
-    // cancel / close -> no-op, name stays as-is
     if (result?.event === 'confirm' && result.data) {
       picker.saveFileName.value = result.data as string;
     }

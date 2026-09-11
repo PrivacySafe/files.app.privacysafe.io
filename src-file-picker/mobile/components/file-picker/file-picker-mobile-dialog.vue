@@ -1,23 +1,19 @@
 <script lang="ts" setup>
-  import { inject, ref, defineAsyncComponent } from 'vue';
-  import { DIALOGS_KEY, type DialogsPlugin } from '@v1nt1248/3nclient-lib/plugins';
-
-  const dialogs = inject<DialogsPlugin>(DIALOGS_KEY)!;
+  import { computed, inject, ref, type ShallowUnwrapRef } from 'vue';
+  import type { Nullable, Ui3nTableExpose } from '@v1nt1248/3nclient-lib';
 
   import { providePickerState } from '@picker/common/composables/usePickerState';
   import { usePickerHistory } from '@picker/common/composables/usePickerHistory';
-  import { DIALOG_REQUEST_KEY } from '@picker/common/capability-bridge/dialog-request-bridge.ts';
-  import pickerBreadcrumb from '@picker/desktop/components/file-picker/picker-breadcrumb.vue';
-  import { usePickerFS } from '@picker/common/composables/pickerFS';
-  import { settleDialog } from '@picker/common/capability-bridge/settle-dialog';
 
+  import type { PickerTableRow } from '@picker/common/types';
+  import { usePickerDialogActions } from '@picker/common/composables/usePickerDialogActions';
+  import { DIALOG_REQUEST_KEY } from '@picker/common/dialog-capabilities';
+  import pickerBreadcrumb from '@picker/common/components/picker-breadcrumb.vue';
   import pickerMobileHeader from './picker-mobile-header.vue';
   import pickerMobileTabs from './picker-mobile-tabs.vue';
   import pickerMobileFileList from './picker-mobile-file-list.vue';
   import pickerMobileFooter from './picker-mobile-footer.vue';
-  import { useI18n } from 'vue-i18n';
 
-  const { t } = useI18n();
   const dialogRequest = inject(DIALOG_REQUEST_KEY);
 
   if (!dialogRequest) {
@@ -27,102 +23,40 @@
   }
 
   const picker = providePickerState(dialogRequest);
-  usePickerHistory(picker);
-  const { userDeviceFsFolders } = usePickerFS();
 
-  const pendingSaveName = ref('');
+  type PickerTableComponent = ShallowUnwrapRef<Ui3nTableExpose<PickerTableRow>>;
 
-  // const nameEditable = ref(false);
+  const tableComponent = ref<Nullable<PickerTableComponent>>(null);
+  const selectedRows = computed(() => tableComponent.value?.selectedRowsArray || ([] as PickerTableRow[]));
 
-  async function handleConfirm() {
-    if (!dialogRequest?.resolve) return;
-
-    if (dialogRequest.mode === 'saveFile') {
-      await handleSaveConfirm();
-      return;
-    }
-
-    try {
-      // Folders never land in "selected" on mobile...a tap on a folder
-      // navigates immediately (see picker-mobile-row.vue)...so whatever's
-      // selected here is guaranteed to be files only. No folder-vs-file
-      // branch needed, unlike desktop's handleSelect.
-      const files = await picker.resolveSelectedFiles();
-      settleDialog(dialogRequest, files);
-    } catch (err) {
-      console.error('🔥 ERROR RESOLVING SELECTED FILES. ', err);
-      settleDialog(dialogRequest, undefined);
-    }
-  }
-
-  async function handleSaveConfirm() {
-    const name = picker.saveFileName.value.trim();
-    if (!name) return;
-
-    if (picker.checkFileNameCollision(name)) {
-      // nameEditable.value = true;
-      pendingSaveName.value = name;
-      await openSaveFileDialog();
-      return;
-    }
-
-    await writeAndClose();
-  }
-
-  async function writeAndClose() {
-    try {
-      const file = await picker.resolveSaveFile();
-      settleDialog(dialogRequest!, file);
-    } catch (err) {
-      console.error('🔥 ERROR RESOLVING SAVE FILE. ', err);
-      settleDialog(dialogRequest!, undefined);
-    }
-  }
-
-  function handleCancel() {
-    picker.clearSelection();
-    if (dialogRequest) {
-      settleDialog(dialogRequest, undefined);
-    }
-  }
-
-  async function openSaveFileDialog() {
-    const component = defineAsyncComponent(() => import('@picker/desktop/dialogs/file-collision-dialog.vue'));
-
-    const result = await dialogs.$openDialog(component, {
-      data: pendingSaveName.value,
-      dialogProps: {
-        title: t('dialog.file_exist.title'),
-        cssStyle: { maxHeight: '95%' },
-        closeOnClickOverlay: false,
-        confirmButton: false,
-        cancelButton: false,
-      },
-    });
-
-    if (result?.event !== 'confirm') return;
-
-    if (result.data) {
-      picker.saveFileName.value = result.data as string;
-      await handleSaveConfirm();
-      return;
-    }
-
-    await writeAndClose();
-  }
+  const { handleConfirm, handleRowConfirm, handleCancel } = usePickerDialogActions(
+    dialogRequest,
+    picker,
+    selectedRows,
+  );
+  usePickerHistory(picker, handleCancel);
 </script>
 
 <template>
   <div :class="$style.filePickerMobileDialog">
-    <picker-mobile-header @cancel="handleCancel" />
-    <picker-mobile-tabs :folders="userDeviceFsFolders" />
+    <picker-mobile-header
+      :selected-rows="selectedRows"
+      @cancel="handleCancel"
+    />
+    <picker-mobile-tabs />
     <picker-breadcrumb />
 
     <div :class="$style.content">
-      <picker-mobile-file-list />
+      <picker-mobile-file-list
+        @init="tableComponent = $event"
+        @confirm="handleRowConfirm"
+      />
     </div>
 
-    <picker-mobile-footer @confirm="handleConfirm" />
+    <picker-mobile-footer
+      :selected-rows="selectedRows"
+      @confirm="handleConfirm"
+    />
   </div>
 </template>
 

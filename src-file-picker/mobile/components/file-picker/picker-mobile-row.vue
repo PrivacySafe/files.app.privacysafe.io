@@ -1,50 +1,105 @@
 <script lang="ts" setup>
-  import { computed, inject } from 'vue';
-  import { Ui3nIcon } from '@v1nt1248/3nclient-lib';
-  import { usePickerState } from '@picker/common/composables/usePickerState';
-  import { DIALOG_REQUEST_KEY } from '@picker/common/capability-bridge/dialog-request-bridge';
+  import { computed } from 'vue';
+  import { Ui3nIcon, Ui3nLongPress } from '@v1nt1248/3nclient-lib';
   import { formatFileSize } from '@v1nt1248/3nclient-lib/utils';
   import type { PickerTableRow } from '@picker/common/types';
 
+  const LONG_PRESS_DELAY = 500;
+  const LONG_PRESS_DISTANCE_THRESHOLD = 10;
+  const vUi3nLongPress = Ui3nLongPress;
+
   const props = defineProps<{
     row: PickerTableRow;
-    isSelected: boolean;
+    isRowSelected?: boolean;
+    resolveFileOnTap?: boolean;
+    events?: {
+      select: (row: PickerTableRow, withoutEvents?: boolean) => void;
+    };
   }>();
 
-  const picker = usePickerState();
-  const dialogRequest = inject(DIALOG_REQUEST_KEY);
+  const emit = defineEmits<{
+    navigate: [id: string];
+    confirm: [row: PickerTableRow];
+  }>();
 
   const sizeLabel = computed(() => (props.row.isFolder ? '' : formatFileSize(props.row.size)));
+  let longPressTriggered = false;
+
+  // Ui3nTable remains the only owner of checkbox selection. Both icon tap
+  // and long press delegate to the table-provided select handler.
+  function toggleRowSelection() {
+    props.events?.select(props.row);
+  }
+
+  function selectRow(e: Event) {
+    e.stopPropagation();
+    toggleRowSelection();
+  }
+
+  function handlePointerDown() {
+    // A fresh gesture must never inherit a completed long press whose release
+    // did not produce a click (for example after cancellation by the platform).
+    longPressTriggered = false;
+  }
+
+  function handleLongPress() {
+    longPressTriggered = true;
+    toggleRowSelection();
+  }
 
   function handleTap() {
+    // Ui3nLongPress owns gesture timing/movement cancellation, but browsers
+    // still emit click after a completed long press. Consume that click so
+    // long-press selection cannot also navigate/resolve the row.
+    if (longPressTriggered) {
+      longPressTriggered = false;
+      return;
+    }
+
     if (props.row.isFolder) {
-      // Single tap navigates...dblclick is disabled on mobile.
-      picker.navigateToFolder(props.row.id);
+      emit('navigate', props.row.id);
+      return;
+    }
+    if (props.resolveFileOnTap) {
+      emit('confirm', props.row);
       return;
     }
 
-    if (dialogRequest?.mode === 'saveFile') {
-      // Same rule as desktop: tapping a file in save mode fills the
-      // filename field rather than adding to "selected".
-      picker.saveFileName.value = props.row.name;
-      picker.setSelectedIds([props.row.id]);
-      return;
-    }
-
-    picker.toggleSelect(props.row.id);
+    // Save mode keeps its existing file-selection behavior so selecting an
+    // existing file can populate saveFileName before Save/collision handling.
+    toggleRowSelection();
   }
 </script>
 
 <template>
   <div
-    :class="[$style.row, isSelected && $style.selected]"
+    v-ui3n-long-press="{
+      handler: handleLongPress,
+      delay: LONG_PRESS_DELAY,
+      distanceThreshold: LONG_PRESS_DISTANCE_THRESHOLD,
+    }"
+    :class="[$style.row, isRowSelected && $style.selected]"
+    @pointerdown="handlePointerDown"
     @click="handleTap"
   >
-    <ui3n-icon
-      :icon="row.isFolder ? 'round-folder' : 'round-subject'"
-      :size="20"
-      color="var(--color-icon-table-secondary-default)"
-    />
+    <span
+      :class="$style.iconSlot"
+      @pointerdown.stop
+      @click="selectRow"
+    >
+      <ui3n-icon
+        v-if="isRowSelected"
+        icon="round-check-box"
+        :size="20"
+        color="var(--color-icon-control-accent-default)"
+      />
+      <ui3n-icon
+        v-else
+        :icon="row.isFolder ? 'round-folder' : 'round-subject'"
+        :size="20"
+        color="var(--color-icon-table-secondary-default)"
+      />
+    </span>
 
     <div :class="$style.main">
       <span :class="$style.name">{{ row.name }}</span>

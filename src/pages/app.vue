@@ -67,17 +67,13 @@
           alt="logo"
           :class="$style.toolbarLogo"
           @click="openDashboard"
-        >
+        />
 
-        <div :class="$style.delimiter">
-          /
-        </div>
+        <div :class="$style.delimiter">/</div>
 
         <div :class="$style.info">
           {{ t('app.title') }}
-          <div :class="$style.version">
-            v {{ appVersion }}
-          </div>
+          <div :class="$style.version">v {{ appVersion }}</div>
         </div>
       </div>
 

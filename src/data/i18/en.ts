@@ -262,17 +262,35 @@ export const en = {
       cancel: '@:dialog.button.cancel',
       select: 'Select',
       save: 'Save',
+      go: 'Go',
+      proceed: 'Proceed',
+      next: 'Next',
+      enter: 'Enter',
     },
     selected_items: 'Items selected',
     sidebar_title: 'Browse',
     tab_3n_storage: '3N Storage',
     notification: {
       error: {
-        invalid_filename: 'Invalid file name: file name cannot contain "/" or "\\"',
+        invalid_filename:
+          'Invalid file name. Avoid reserved characters, control characters, and reserved system names.',
+        save_file: 'Failed to save file',
+        open_file: 'Failed to open the selected file',
+        folder_name_collision: 'A folder with that name already exists. Please choose a different name.',
+      },
+      success: {
+        save_file: 'File saved successfully',
       },
     },
     footer: {
       save_as: 'Save as',
+    },
+    category: {
+      home: 'Home',
+      device: 'Device',
+      system_synced: 'System Synced',
+      system_local: 'System Local',
+      device_system: 'Device System',
     },
   },
 };

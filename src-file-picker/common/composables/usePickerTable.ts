@@ -1,6 +1,7 @@
 import dayjs from 'dayjs';
 import type { Ui3nTableProps } from '@v1nt1248/3nclient-lib';
 import type { PickerFile, PickerTableRow } from '@picker/common/types';
+import { useI18n } from 'vue-i18n';
 
 function getExtension(name: string): string {
   const idx = name.lastIndexOf('.');
@@ -23,7 +24,10 @@ function sortRows(
     const cmp =
       typeof aVal === 'number' && typeof bVal === 'number'
         ? aVal - bVal
-        : String(aVal).toLowerCase().localeCompare(String(bVal).toLowerCase());
+        : String(aVal).localeCompare(String(bVal), undefined, {
+            numeric: true,
+            sensitivity: 'base',
+          });
 
     return direction === 'asc' ? cmp : -cmp;
   });
@@ -32,6 +36,8 @@ function sortRows(
 const SORTABLE_FIELDS = ['name', 'type', 'size', 'displayingDate'] as const;
 
 export function usePickerTable() {
+  const { t } = useI18n();
+
   function prepareTableData(
     entries: PickerFile[],
     multiSelections: boolean,
@@ -55,10 +61,6 @@ export function usePickerTable() {
       config: {
         fieldAsRowKey: 'id',
         selectable: multiSelections ? 'multiple' : 'single',
-        // Seeds Ui3nTable's OWN internal sort-icon state on mount only
-        // useTable() reads this once at setup, not reactively. After that,
-        // clicking a header updates the icon itself; we don't need to push
-        // it back in. See note below.
         sortOrder: { field, direction: sortOrder },
         columnStyle: {
           name: { width: 'calc(98% - 232px)' },
@@ -69,10 +71,10 @@ export function usePickerTable() {
         showNoDataMessage: true,
       },
       head: [
-        { key: 'name', text: 'Name', sortable: true },
-        { key: 'type', text: 'Type', sortable: true },
-        { key: 'size', text: 'Size', sortable: true },
-        { key: 'displayingDate', text: 'Date', sortable: true },
+        { key: 'name', text: t('fs.table.header.name'), sortable: true },
+        { key: 'type', text: t('fs.table.header.type'), sortable: true },
+        { key: 'size', text: t('fs.table.header.size'), sortable: true },
+        { key: 'displayingDate', text: t('fs.table.header.date'), sortable: true },
       ],
       body: { content: sortRows(content, field, sortOrder) },
     };

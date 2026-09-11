@@ -1,18 +1,13 @@
-import { reactive, computed, watch, provide, inject, type InjectionKey } from 'vue';
-
-import { getListFolder } from '@shared/utils/fs-utils';
-import type { FsSource, PickerState, PickerSource, PickerWindowState, PickerFile } from '@picker/common/types';
+import { reactive, computed, provide, inject, ref, watch, type InjectionKey } from 'vue';
+import { storeToRefs } from 'pinia';
+import { pickerStorageSrv } from '@picker/common/services/picker-storage.service';
+import { usePickerFsStore } from '@picker/common/stores/picker-fs.store';
+import { groupPickerFsRoots } from '@picker/common/utils/picker-fs-grouping';
+import { getPickerOperatingSystem } from '@picker/common/utils/operating-system';
+import type { ListingEntryExtended, RootFsFolderView } from '@shared/types';
+import type { PickerState, PickerWindowState, PickerFile, PickerRootId } from '@picker/common/types';
 import type { DialogRequestState } from '@picker/common/types/dialog-types';
 import { isValidFileName } from '@picker/common/utils/validate-filename';
-
-// Maps our two UI tabs to the real fs sources getUserFS understands.
-// ASSUMPTION: '3n-storage' -> 'synced' only for now. 'local' isn't
-// addressed yet...revisit if it needs its own toggle inside this tab.
-
-const TAB_TO_FS_SOURCE: Record<PickerSource, FsSource> = {
-  filesystem: 'device',
-  '3n-storage': 'synced',
-};
 
 function createDefaultWindowState(): PickerWindowState {
   return {
@@ -24,130 +19,197 @@ function createDefaultWindowState(): PickerWindowState {
   };
 }
 
-export function createPickerState(dialogRequest: DialogRequestState) {
+interface DefaultSaveLocation {
+  folderPath: string;
+  fileName: string;
+}
+
+function parseDefaultSaveLocation(defaultPath?: string): DefaultSaveLocation {
+  const normalizedPath = (defaultPath ?? '').trim().replaceAll('\\', '/');
+  if (!normalizedPath) {
+    return {
+      folderPath: '',
+      fileName: '',
+    };
+  }
+
+  // A trailing separator means the caller supplied a folder location rather
+  // than a filename as the final path segment.
+  const pointsToFolder = normalizedPath.endsWith('/');
+  const path = normalizedPath.replace(/^\/+|\/+$/g, '');
+  if (!path) {
+    return {
+      folderPath: '',
+      fileName: '',
+    };
+  }
+
+  const segments = path.split('/').filter(Boolean);
+  if (pointsToFolder) {
+    return {
+      folderPath: segments.join('/'),
+      fileName: '',
+    };
+  }
+
+  const fileName = segments.pop() ?? '';
+
+  return {
+    folderPath: segments.join('/'),
+    fileName,
+  };
+}
+
+function createPickerState(dialogRequest: DialogRequestState) {
+  const fsStore = usePickerFsStore();
+  const { fsAvailableFolderList, fsList } = storeToRefs(fsStore);
+
+  const categories = computed(() => groupPickerFsRoots(fsAvailableFolderList.value));
+  const flatRoots = computed<RootFsFolderView[]>(() => categories.value.flatMap(category => category.roots));
+  const homeRootId = computed(() => categories.value.find(category => category.key === 'home')?.roots[0]?.id);
+  const operatingSystem = getPickerOperatingSystem();
+
   const state = reactive<PickerState>({
-    activeTab: 'filesystem',
-    tileView: false,
-    selected: new Set<string>(),
-    saveFileName: dialogRequest.defaultPath ?? '',
-    windows: {
-      filesystem: createDefaultWindowState(),
-      '3n-storage': createDefaultWindowState(),
+    activeRootId: '',
+    windows: {},
+  });
+
+  const defaultSaveLocation = computed(() => parseDefaultSaveLocation(dialogRequest.defaultPath));
+
+  // null means the user has not edited the field yet. Until then the filename
+  // is derived from dialogRequest.defaultPath, including a full path delivered
+  // after the picker state was created.
+  const saveFileNameOverride = ref<string | null>(null);
+  const saveFileName = computed({
+    get: () => saveFileNameOverride.value ?? defaultSaveLocation.value.fileName,
+    set: (name: string) => {
+      saveFileNameOverride.value = name;
     },
   });
 
-  // When saving file, filename will appear in header for mobile version
-  watch(
-    () => dialogRequest.defaultPath,
-    newPath => {
-      if (newPath && !state.saveFileName) {
-        state.saveFileName = newPath;
-      }
-    },
-  );
+  // Each root gets its own monotonically increasing load generation. Only the
+  // newest generation is allowed to commit status/data/errors for that root.
+  const loadGenerations = new Map<PickerRootId, number>();
 
-  const currentWindow = computed(() => state.windows[state.activeTab]);
-
-  // Memoized per-source FS handle fetches — getUserFS only called once
-  // per fs source per picker instance, even switching tabs back and forth.
-  // getUserFS returns an FSItem whose .item is writable or readonly
-  // depending on the manifest's storage.userFS grant...this app requests
-  // "all", so the same underlying object backs both getFs and getWritableFs.
-  const fsHandles = new Map<FsSource, Promise<web3n.files.FS>>();
-
-  async function getFs(fsSource: FsSource): Promise<web3n.files.FS> {
-    if (!fsHandles.has(fsSource)) {
-      const promise = w3n.storage!.getUserFS!(fsSource)
-        .then(fsItem => {
-          if (!fsItem.isFolder || !fsItem.item) {
-            throw new Error(`getUserFS('${fsSource}') did not resolve to a folder root.`);
-          }
-          return fsItem.item as web3n.files.FS;
-        })
-        .catch(err => {
-          fsHandles.delete(fsSource); // allow retry on next call
-          throw err;
-        });
-      fsHandles.set(fsSource, promise);
-    }
-    return fsHandles.get(fsSource)!;
+  function nextLoadGeneration(rootId: PickerRootId): number {
+    const generation = (loadGenerations.get(rootId) ?? 0) + 1;
+    loadGenerations.set(rootId, generation);
+    return generation;
   }
 
-  //Same cached handle as getFs, viewed through the writable interface.
-  async function getWritableFs(fsSource: FsSource): Promise<web3n.files.WritableFS> {
-    const fs = await getFs(fsSource);
+  function isLatestLoad(rootId: PickerRootId, generation: number): boolean {
+    return loadGenerations.get(rootId) === generation;
+  }
+
+  function ensureWindow(rootId: PickerRootId): PickerWindowState {
+    if (!state.windows[rootId]) {
+      state.windows[rootId] = createDefaultWindowState();
+    }
+    return state.windows[rootId];
+  }
+
+  const currentWindow = computed(() => ensureWindow(state.activeRootId));
+
+  function findRoot(rootId: PickerRootId): RootFsFolderView | undefined {
+    return flatRoots.value.find(root => root.id === rootId);
+  }
+
+  const activeFsId = computed(() => findRoot(state.activeRootId)?.fsId ?? '');
+
+  async function getFs(rootId: PickerRootId): Promise<web3n.files.FS> {
+    const root = findRoot(rootId);
+    const item = root ? fsList.value[root.fsId] : undefined;
+    if (!item?.entity) {
+      throw new Error(`No FS entity resolved for root '${rootId}' (fsId '${root?.fsId ?? '?'}').`);
+    }
+    return item.entity;
+  }
+
+  async function getWritableFs(rootId: PickerRootId): Promise<web3n.files.WritableFS> {
+    const fs = await getFs(rootId);
     return fs as unknown as web3n.files.WritableFS;
   }
 
-  async function loadEntries(tab: PickerSource, path: string) {
-    const win = state.windows[tab];
+  function mapListingEntry(entry: ListingEntryExtended, path: string): PickerFile {
+    return {
+      // Keep picker navigation paths source-relative even though the service
+      // also returns fullPath/basePath-aware values.
+      id: path ? `${path}/${entry.name}` : entry.name,
+      name: entry.name,
+      isFolder: entry.type === 'folder',
+      size: entry.size,
+      ctime: entry.ctime ?? entry.mtime,
+    };
+  }
+
+  async function loadEntries(rootId: PickerRootId, path: string): Promise<void> {
+    const root = findRoot(rootId);
+    if (!root) {
+      return;
+    }
+
+    const win = ensureWindow(rootId);
+    const generation = nextLoadGeneration(rootId);
     win.status = 'loading';
     win.error = undefined;
 
     try {
-      const fs = await getFs(TAB_TO_FS_SOURCE[tab]);
-      const lst = await getListFolder({
-        fs,
-        folderName: path,
-        vAPI: false,
-        stopErrorPropagate: true,
-        actionIfError: err => {
-          win.status = 'error';
-          win.error = err;
-        },
+      const data = await pickerStorageSrv.getFolderContentFilledList({
+        fsId: root.fsId,
+        path,
+        operatingSystem,
       });
-      if (lst) {
-        const filtered = lst.filter(entry => !entry.name.startsWith('.'));
-
-        // Stats fetch...per-entry, best-effort. A failed stat() shouldn't
-        // blank the whole listing; entry just renders with no size/date.
-        const enriched = await Promise.all(
-          filtered.map(async (entry): Promise<PickerFile> => {
-            const id = path ? `${path}/${entry.name}` : entry.name;
-            let size: number | undefined;
-            let ctime: Date | undefined;
-
-            try {
-              const stats = await fs.stat(id);
-              size = stats.size;
-              ctime = stats.ctime ?? stats.mtime;
-            } catch {
-              // leave size/ctime undefined...row still renders
-            }
-
-            return {
-              id,
-              name: entry.name,
-              isFolder: !!entry.isFolder,
-              size,
-              ctime,
-            };
-          }),
-        );
-
-        win.entries = enriched;
-        win.currentPath = path;
-        win.status = 'ready';
+      if (!isLatestLoad(rootId, generation)) {
+        return;
       }
-      // if lst is undefined, actionIfError already set status/error above
+      win.entries = data.map(entry => mapListingEntry(entry, path));
+      win.currentPath = path;
+      win.status = 'ready';
     } catch (err) {
-      // getFs rejected...capability/manifest problem, distinct from a listing failure
+      if (!isLatestLoad(rootId, generation)) {
+        return;
+      }
       win.status = 'error';
       win.error = err;
     }
   }
 
-  function switchTab(tab: PickerSource) {
-    state.selected.clear();
-    state.activeTab = tab;
-    if (state.windows[tab].status === 'idle') {
-      loadEntries(tab, '');
+  async function switchRoot(rootId: PickerRootId): Promise<void> {
+    if (!rootId) {
+      return;
+    }
+
+    const win = ensureWindow(rootId);
+
+    if (rootId === state.activeRootId) {
+      if (win.currentPath || win.status === 'error') {
+        await loadEntries(rootId, '');
+      }
+      return;
+    }
+
+    // An errored root may still carry the last successfully displayed path.
+    // Reset that inactive window before exposing it as active so history does
+    // not record a stale nested path immediately before the retry-at-root.
+    if (win.status === 'error') {
+      win.currentPath = '';
+    }
+    state.activeRootId = rootId;
+    if (win.status === 'idle' || win.status === 'error') {
+      await loadEntries(rootId, '');
     }
   }
 
-  function navigateToFolder(path: string) {
-    state.selected.clear();
-    loadEntries(state.activeTab, path);
+  function navigateToFolder(path: string): Promise<void> {
+    return loadEntries(state.activeRootId, path);
+  }
+
+  async function restoreLocation(rootId: PickerRootId, path: string): Promise<void> {
+    if (!rootId) {
+      return;
+    }
+    state.activeRootId = rootId;
+    await loadEntries(rootId, path);
   }
 
   function setSort(sortBy: string, sortOrder: 'asc' | 'desc') {
@@ -155,81 +217,66 @@ export function createPickerState(dialogRequest: DialogRequestState) {
     currentWindow.value.sortOrder = sortOrder;
   }
 
-  function toggleTileView() {
-    state.tileView = !state.tileView;
-  }
-
-  function toggleSelect(fileId: string) {
-    if (state.selected.has(fileId)) {
-      state.selected.delete(fileId);
-      return;
-    }
-    if (dialogRequest.multiSelections === false && state.selected.size >= 1) {
-      state.selected.clear();
-    }
-    state.selected.add(fileId);
-  }
-
-  function clearSelection() {
-    state.selected.clear();
-  }
-
-  function setSaveFileName(name: string) {
-    state.saveFileName = name;
-  }
-
   function isSaveFileNameValid(name: string): boolean {
     return isValidFileName(name);
   }
 
-  function setSelectedIds(ids: string[]) {
-    state.selected.clear();
-    ids.forEach(id => state.selected.add(id));
+  function findFileNameCollision(name: string): PickerFile | undefined {
+    if (!name) {
+      return undefined;
+    }
+    return currentWindow.value.entries.find(entry => entry.name === name);
   }
 
-  /**
-   * Collision check against the already-loaded folder listing...
-   * no extra fs round-trip needed. Only meaningful for files, not folders.
-   */
-  function checkFileNameCollision(name: string): boolean {
-    if (!name) return false;
-    return currentWindow.value.entries.some(entry => !entry.isFolder && entry.name === name);
+  async function initializeDefaultRoot(rootId: PickerRootId): Promise<void> {
+    const initialPath = dialogRequest.mode === 'saveFile' ? defaultSaveLocation.value.folderPath : '';
+    state.activeRootId = rootId;
+    await loadEntries(rootId, initialPath);
+
+    if (initialPath && ensureWindow(rootId).status === 'error') {
+      // A caller-provided parent path may be stale or unavailable. Keep the
+      // filename, but fall back to the Home root instead of stranding the
+      // picker on its initial error screen.
+      await loadEntries(rootId, '');
+    }
   }
 
-  // Kick off the load for the default tab ('filesystem' / 'device') on mount.
-  loadEntries(state.activeTab, '');
+  watch(
+    [homeRootId, () => dialogRequest.mode, () => dialogRequest.defaultPath],
+    ([rootId, mode]) => {
+      if (!rootId || !mode || state.activeRootId) {
+        return;
+      }
 
-  async function resolveSelectedFiles(): Promise<web3n.files.ReadonlyFile[]> {
-    const fs = await getFs(TAB_TO_FS_SOURCE[state.activeTab]);
-    const files = await Promise.all(Array.from(state.selected).map(path => fs.readonlyFile(path)));
-    return files;
+      void initializeDefaultRoot(rootId);
+    },
+    { immediate: true },
+  );
+
+  async function resolveSelectedFiles(paths: string[]): Promise<web3n.files.ReadonlyFile[]> {
+    const fs = await getFs(state.activeRootId);
+    return Promise.all(paths.map(path => fs.readonlyFile(path)));
   }
 
   async function resolveSaveFile(): Promise<web3n.files.WritableFile> {
-    const fs = await getWritableFs(TAB_TO_FS_SOURCE[state.activeTab]);
+    const fs = await getWritableFs(state.activeRootId);
     const path = currentWindow.value.currentPath
-      ? `${currentWindow.value.currentPath}/${state.saveFileName}`
-      : state.saveFileName;
+      ? `${currentWindow.value.currentPath}/${saveFileName.value}`
+      : saveFileName.value;
     return fs.writableFile(path);
   }
 
   return {
-    activeTab: computed(() => state.activeTab),
-    tileView: computed(() => state.tileView),
-    selected: computed(() => state.selected),
-    saveFileName: computed({
-      get: () => state.saveFileName,
-      set: setSaveFileName,
-    }),
+    activeRootId: computed(() => state.activeRootId),
+    activeFsId,
+    categories,
+    saveFileName,
     currentWindow,
-    switchTab,
+    switchRoot,
     navigateToFolder,
+    restoreLocation,
     setSort,
-    toggleTileView,
-    toggleSelect,
-    clearSelection,
-    setSelectedIds,
-    checkFileNameCollision,
+    findFileNameCollision,
     isSaveFileNameValid,
     resolveSelectedFiles,
     resolveSaveFile,
@@ -253,6 +300,5 @@ export function usePickerState(): PickerStateApi {
       'usePickerState() called outside <FilePicker> — did you forget to mount it under the root component?',
     );
   }
-
   return api;
 }

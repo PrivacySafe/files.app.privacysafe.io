@@ -1,40 +1,31 @@
 import { ref, computed, shallowRef } from 'vue';
 import { defineStore } from 'pinia';
-import { useAppStore } from '@/store/app.store';
 import type { RootFsFolderView, FsListItem } from '@shared/types';
-import { START_OF_SYSTEM_FS_ID, USER_DEVICE_FS, USER_FS, USER_LOCAL_FS } from '@shared/constants';
-import { appStorageSrv } from '@/services/services-provider';
+import { START_OF_SYSTEM_FS_ID, USER_DEVICE_FS, USER_FS } from '@shared/constants';
+import { pickerStorageSrv } from '@picker/common/services/picker-storage.service';
 
 export const usePickerFsStore = defineStore('picker-fs', () => {
-  const appStore = useAppStore();
-
-  const { initializeFsItems: _initializeFsItems, getFsList, getFsRootFolderList } = appStorageSrv;
+  const { getFsList, getFsRootFolderList } = pickerStorageSrv;
 
   const fsList = shallowRef<Record<string, FsListItem>>({});
   const fsFolderList = ref<RootFsFolderView[]>([]);
 
+  // Current picker requirements are fixed: Home, Device and System roots are
+  // available; local-user storage is intentionally not exposed.
   const fsAvailableFolderList = computed(() =>
-    fsFolderList.value.filter(f => {
-      const { localFoldersDisplaying, systemFoldersDisplaying, deviceFoldersDisplaying } =
-        appStore.appStorageSettings;
-      return (
-        f.fsId === USER_FS ||
-        (localFoldersDisplaying && f.fsId === USER_LOCAL_FS) ||
-        (deviceFoldersDisplaying && f.fsId === USER_DEVICE_FS) ||
-        (systemFoldersDisplaying && f.id.includes(START_OF_SYSTEM_FS_ID))
-      );
-    }),
+    fsFolderList.value.filter(
+      folder =>
+        folder.fsId === USER_FS || folder.fsId === USER_DEVICE_FS || folder.id.includes(START_OF_SYSTEM_FS_ID),
+    ),
   );
 
   async function initializeFsItems(): Promise<void> {
-    if (!getFsList) {
-      await _initializeFsItems();
-    }
     fsList.value = await getFsList();
     fsFolderList.value = await getFsRootFolderList();
   }
 
   return {
+    fsList,
     fsAvailableFolderList,
     initializeFsItems,
   };

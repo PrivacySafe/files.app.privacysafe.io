@@ -1,11 +1,15 @@
 <script lang="ts" setup>
   import { computed, inject } from 'vue';
   import { Ui3nButton, Ui3nEditable, type Nullable } from '@v1nt1248/3nclient-lib';
-  import { NOTIFICATIONS_KEY, NotificationsPlugin } from '@v1nt1248/3nclient-lib/plugins';
+  import { NOTIFICATIONS_KEY, type NotificationsPlugin } from '@v1nt1248/3nclient-lib/plugins';
   import { usePickerState } from '@picker/common/composables/usePickerState';
-  import { DIALOG_REQUEST_KEY } from '@picker/common/capability-bridge/dialog-request-bridge';
-  import { isValidFileName } from '@picker/common/utils/validate-filename';
+  import { DIALOG_REQUEST_KEY } from '@picker/common/dialog-capabilities';
+  import type { PickerTableRow } from '@picker/common/types';
   import { useI18n } from 'vue-i18n';
+
+  const props = defineProps<{
+    selectedRows: PickerTableRow[];
+  }>();
 
   const emit = defineEmits<{
     confirm: [];
@@ -16,27 +20,38 @@
   const dialogRequest = inject(DIALOG_REQUEST_KEY);
   const notifications = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
   const isSaveMode = computed(() => dialogRequest?.mode === 'saveFile');
+  const selectedEntry = computed(() => (props.selectedRows.length === 1 ? props.selectedRows[0] : undefined));
+  const isSelectedFolder = computed(() => selectedEntry.value?.isFolder === true);
+  const isSaveNameValid = computed(() => picker.isSaveFileNameValid(picker.saveFileName.value));
 
-  const hasSelection = computed(() => (isSaveMode.value ? true : picker.selected.value.size > 0));
-  const confirmLabel = computed(() =>
-    isSaveMode.value ? t('file_picker.button.save') : dialogRequest?.btnLabel || t('file_picker.button.select'),
+  const hasSelection = computed(
+    () =>
+      isSelectedFolder.value ||
+      (isSaveMode.value ? isSaveNameValid.value : props.selectedRows.some(row => !row.isFolder)),
   );
 
+  const confirmLabel = computed(() => {
+    if (isSelectedFolder.value) {
+      return t('file_picker.button.proceed');
+    }
+    if (isSaveMode.value) {
+      return t('file_picker.button.save');
+    }
+    return dialogRequest?.btnLabel || t('file_picker.button.select');
+  });
+
   function updateSaveFileName(newName: Nullable<string>) {
-    if (!newName) {
-      return;
+    const trimmed = (newName ?? '').trim();
+    picker.saveFileName.value = trimmed;
+
+    if (trimmed && !picker.isSaveFileNameValid(trimmed)) {
+      notifications.$createNotice({
+        type: 'error',
+        withIcon: false,
+        content: t('file_picker.notification.error.invalid_filename'),
+        duration: 4000,
+      });
     }
-    const trimmed = newName.trim();
-    if (isValidFileName(trimmed)) {
-      picker.saveFileName.value = trimmed;
-      return;
-    }
-    notifications.$createNotice({
-      type: 'error',
-      withIcon: false,
-      content: t('file_picker.notification.error.invalid_filename'),
-      duration: 4000,
-    });
   }
 </script>
 
@@ -46,7 +61,7 @@
       v-if="!isSaveMode"
       :class="$style.selectedBox"
     >
-      <span>{{ picker.selected.value.size }} {{ t('file_picker.selected_items') }}</span>
+      <span>{{ selectedRows.length }} {{ t('file_picker.selected_items') }}</span>
     </div>
 
     <div
@@ -66,12 +81,14 @@
       <ui3n-button
         type="custom"
         color="var(--color-bg-button-tritery-default)"
+        :class="$style.footerBtn"
         @click="emit('cancel')"
       >
         {{ t('file_picker.button.cancel') }}
       </ui3n-button>
       <ui3n-button
         :disabled="!hasSelection"
+        :class="$style.footerBtn"
         @click="emit('confirm')"
       >
         {{ confirmLabel }}
@@ -111,5 +128,8 @@
     display: flex;
     gap: 12px;
     flex-shrink: 0;
+  }
+  .footerBtn {
+    min-width: 79px;
   }
 </style>

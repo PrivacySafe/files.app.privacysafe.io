@@ -66,9 +66,7 @@
 
             <div :class="$style.name">
               <span>
-                <template v-if="short">
-                  {{ parentFolder }} /
-                </template>
+                <template v-if="short"> {{ parentFolder }} / </template>
                 {{ stats?.name }}
               </span>
             </div>

@@ -2,7 +2,7 @@
   import { computed } from 'vue';
   import get from 'lodash/get';
   import { Ui3nChip } from '@v1nt1248/3nclient-lib';
-  import { FILE_TYPE_COLOR_DEFAULT, FILE_TYPE_COLORS } from './constants';
+  import { FILE_TYPE_COLOR_DEFAULT, FILE_TYPE_COLORS } from '@picker/common/constants/file-type';
 
   const props = defineProps<{
     fileType: string;

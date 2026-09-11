@@ -17,12 +17,14 @@
 <script lang="ts" setup>
   import { Ui3nDialogProvider } from '@v1nt1248/3nclient-lib';
   import filePickerMobileDialog from '@picker/mobile/components/file-picker/file-picker-mobile-dialog.vue';
+  import { useInitSetup } from '@picker/common/composables/useInitSetup';
+  useInitSetup();
 </script>
 
 <template>
   <div :class="$style.app">
     <file-picker-mobile-dialog />
-    <Ui3nDialogProvider />
+    <ui3n-dialog-provider />
   </div>
 </template>
 

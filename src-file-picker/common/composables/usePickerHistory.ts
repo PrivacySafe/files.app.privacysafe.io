@@ -1,48 +1,75 @@
-import { watch, onBeforeUnmount } from 'vue';
+import { nextTick, watch, onBeforeUnmount } from 'vue';
 import type { PickerStateApi } from '@picker/common/composables/usePickerState';
-import type { PickerSource } from '@picker/common/types';
 
 interface HistoryEntry {
-  tab: PickerSource;
+  rootId: string;
   path: string;
 }
 
-/**
- * Mirrors picker navigation (tab + path) into window.history so Android's
- * WebView back button (canGoBack()/goBack()) retraces navigation one level
- * at a time...same as the breadcrumb's back arrow...instead of immediately
- * falling through to Android's Activity-level back handling.
- *
- * Uses replaceState (not pushState) on mount: labels the existing history
- * entry instead of adding a new one, so a user who hasn't navigated
- * anywhere yet gets an immediate exit-attempt on the first back press,
- * not a wasted no-op press before the real exit.
- *
- * Mobile-only for now. Not wired into desktop.
- */
-export function usePickerHistory(picker: PickerStateApi) {
-  let restoring = false; // guards popstate-driven changes from re-pushing
+interface ExitHistoryEntry {
+  exitPicker: true;
+}
 
-  history.replaceState({ tab: picker.activeTab.value, path: '' } satisfies HistoryEntry, '');
+type PickerHistoryEntry = HistoryEntry | ExitHistoryEntry;
+
+function isExitHistoryEntry(entry: PickerHistoryEntry | null): entry is ExitHistoryEntry {
+  return !!entry && 'exitPicker' in entry && entry.exitPicker === true;
+}
+
+export function usePickerHistory(picker: PickerStateApi, onExit: () => void) {
+  let restoring = false;
+  let initialized = false;
+
+  // Keep one picker-owned entry behind the initial location. When Android's
+  // system Back reaches it, cancel the dialog instead of falling through to
+  // the WebView/Activity back behavior with an unresolved capability request.
+  history.replaceState({ exitPicker: true } satisfies ExitHistoryEntry, '');
 
   const stopWatch = watch(
-    () => [picker.activeTab.value, picker.currentWindow.value.currentPath] as const,
-    ([tab, path]) => {
-      if (restoring) return; // change came FROM popstate, don't re-push
-      history.pushState({ tab, path } satisfies HistoryEntry, '');
+    () => [picker.activeRootId.value, picker.currentWindow.value.currentPath] as const,
+    ([rootId, path]) => {
+      if (restoring || !rootId) {
+        return;
+      }
+
+      const entry = { rootId, path } satisfies HistoryEntry;
+      if (!initialized) {
+        history.pushState(entry, '');
+        initialized = true;
+        return;
+      }
+
+      const current = history.state as PickerHistoryEntry | null;
+
+      if (!isExitHistoryEntry(current) && current?.rootId === rootId && current.path === path) {
+        return;
+      }
+
+      history.pushState(entry, '');
     },
+    { immediate: true },
   );
 
-  function onPopState(e: PopStateEvent) {
-    const entry = e.state as HistoryEntry | null;
-    if (!entry) return; // at root already — nothing left for us to handle
+  async function onPopState(e: PopStateEvent) {
+    const entry = e.state as PickerHistoryEntry | null;
+    if (isExitHistoryEntry(entry)) {
+      onExit();
+      return;
+    }
+
+    if (!entry) {
+      return;
+    }
 
     restoring = true;
-    if (entry.tab !== picker.activeTab.value) {
-      picker.switchTab(entry.tab);
+    try {
+      await picker.restoreLocation(entry.rootId, entry.path);
+      // Keep the guard active through Vue's watcher flush caused by the
+      // restored currentPath/activeRootId commit.
+      await nextTick();
+    } finally {
+      restoring = false;
     }
-    picker.navigateToFolder(entry.path);
-    restoring = false;
   }
 
   window.addEventListener('popstate', onPopState);

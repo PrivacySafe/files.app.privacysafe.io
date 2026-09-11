@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { ref } from 'vue';
+  import { computed, ref } from 'vue';
   import {
     Ui3nDialog,
     Ui3nButton,
@@ -24,28 +24,47 @@
   const newName = ref(props.data);
   const { t } = useI18n();
 
+  const isRenameValid = computed(() => {
+    const trimmed = newName.value.trim();
+    return !!trimmed && trimmed !== props.data && isValidFileName(trimmed);
+  });
+
   function handleOverwrite() {
     emits('action', { event: 'confirm' });
   }
 
-  function toggleRenameInput() {
-    if (mode.value === 'confirm') {
-      mode.value = 'rename';
-    } else {
-      mode.value = 'confirm';
-    }
+  function enterRenameMode() {
+    mode.value = 'rename';
   }
 
   function handleChange() {
-    const trimmed = newName.value.trim();
-    if (!trimmed || trimmed === props.data || !isValidFileName(trimmed)) {
+    if (!isRenameValid.value) {
       return;
     }
-    emits('action', { event: 'confirm', data: trimmed });
+    emits('action', { event: 'confirm', data: newName.value.trim() });
   }
 
   function handleCancel() {
     emits('action', { event: 'cancel' });
+  }
+
+  function handleCancelAction() {
+    if (mode.value === 'rename') {
+      newName.value = props.data;
+      mode.value = 'confirm';
+      return;
+    }
+
+    handleCancel();
+  }
+
+  function handlePrimaryAction() {
+    if (mode.value === 'rename') {
+      handleChange();
+      return;
+    }
+
+    handleOverwrite();
   }
 </script>
 
@@ -57,55 +76,41 @@
     <template #body>
       <div :class="$style.modalBody">
         <span>"{{ props.data }}" {{ t('dialog.file_exist.warning') }}</span>
-      </div>
-    </template>
-    <template #actions>
-      <div
-        v-if="mode === 'confirm'"
-        :class="$style.actionRow"
-      >
-        <ui3n-button
-          type="custom"
-          color="var(--color-bg-button-tritery-default)"
-          @click="handleCancel"
-        >
-          {{ t('dialog.file_exist.button.cancel') }}
-        </ui3n-button>
-        <ui3n-button
-          type="custom"
-          color="var(--color-bg-button-tritery-default)"
-          @click="toggleRenameInput"
-        >
-          {{ t('dialog.file_exist.button.rename') }}
-        </ui3n-button>
-        <ui3n-button @click="handleOverwrite">
-          {{ t('dialog.file_exist.button.overwrite') }}
-        </ui3n-button>
-      </div>
 
-      <div
-        v-else
-        :class="$style.renameRow"
-      >
         <ui3n-input
+          v-if="mode === 'rename'"
           v-model="newName"
           :placeholder="t('dialog.file_exist.placeholder.new_name')"
           clearable
           :class="$style.nameInput"
           @enter="handleChange"
         />
+      </div>
+    </template>
+    <template #actions>
+      <div :class="$style.actionRow">
         <ui3n-button
           type="custom"
           color="var(--color-bg-button-tritery-default)"
-          @click="toggleRenameInput"
+          @click="handleCancelAction"
         >
           {{ t('dialog.file_exist.button.cancel') }}
         </ui3n-button>
+
         <ui3n-button
-          :disabled="!newName.trim() || newName.trim() === props.data || !isValidFileName(newName.trim())"
-          @click="handleChange"
+          v-if="mode === 'confirm'"
+          type="custom"
+          color="var(--color-bg-button-tritery-default)"
+          @click="enterRenameMode"
         >
-          {{ t('dialog.file_exist.button.change') }}
+          {{ t('dialog.file_exist.button.rename') }}
+        </ui3n-button>
+
+        <ui3n-button
+          :disabled="mode === 'rename' && !isRenameValid"
+          @click="handlePrimaryAction"
+        >
+          {{ mode === 'rename' ? t('dialog.file_exist.button.change') : t('dialog.file_exist.button.overwrite') }}
         </ui3n-button>
       </div>
     </template>
@@ -121,15 +126,15 @@
     color: var(--color-text-control-primary-default);
   }
 
-  .actionRow,
-  .renameRow {
+  .actionRow {
     display: flex;
+    width: 100%;
     gap: var(--spacing-s);
     justify-content: flex-end;
     padding: 14px;
   }
 
   .nameInput {
-    flex: 1;
+    width: 100%;
   }
 </style>

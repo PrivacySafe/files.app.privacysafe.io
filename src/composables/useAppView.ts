@@ -14,15 +14,21 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import { computed, defineAsyncComponent, inject, onBeforeMount, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, defineAsyncComponent, inject, onBeforeMount, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { storeToRefs } from 'pinia';
 import hasIn from 'lodash/hasIn';
 import isEmpty from 'lodash/isEmpty';
 import { useAppStore, useFsStore, useSyncQueueStore, useFavoriteStore } from '@/store';
-import { DIALOGS_KEY, VUEBUS_KEY, type DialogsPlugin, type VueBusPlugin } from '@v1nt1248/3nclient-lib/plugins';
+import {
+  DIALOGS_KEY,
+  THEME_KEY,
+  VUEBUS_KEY,
+  type DialogsPlugin,
+  type ThemePlugin,
+  type VueBusPlugin,
+} from '@v1nt1248/3nclient-lib/plugins';
 import type { Ui3nResizeCbArg } from '@v1nt1248/3nclient-lib';
-import { SystemSettings } from '@/utils/ui-settings';
 import { makeServiceCaller } from '@shared/utils/ipc/ipc-service-caller';
 import {
   AppGlobalEvents,
@@ -36,25 +42,32 @@ import { appStorageSrv } from '@/services/services-provider.ts';
 import { STUCK_SYNCHRONIZATION_TIME_CHECKING } from '@shared/constants';
 
 export function useAppView() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { $emitter } = inject<VueBusPlugin<AppGlobalEvents>>(VUEBUS_KEY)!;
   const { $openDialog } = inject<DialogsPlugin>(DIALOGS_KEY)!;
+  const { setTheme } = inject<ThemePlugin>(THEME_KEY)!;
 
   const fsStore = useFsStore();
 
   const appStore = useAppStore();
-  const { appVersion, user: me, connectivityStatus, commonLoading, customLogoSrc } = storeToRefs(appStore);
+  const {
+    appVersion,
+    user: me,
+    connectivityStatus,
+    commonLoading,
+    customLogoSrc,
+    lang,
+    colorTheme,
+  } = storeToRefs(appStore);
   const {
     getAppStorageSettings,
-    getAppConfig,
+    readAndStartWatchingAppConfig,
+    stopWatchingAppConfig,
     getAppVersion,
     getUser,
     getConnectivityStatus,
     setConnectivityStatus,
-    setLang,
-    setColorTheme,
     setAppWindowSize,
-    setCustomLogo,
   } = appStore;
 
   const syncQueueStore = useSyncQueueStore();
@@ -90,6 +103,11 @@ export function useAppView() {
       }
     }
   });
+
+  // Applying of the system level ui-settings is kept in one place: the store
+  // holds values, while the theme plugin and i18n are driven by these watchers.
+  watch(colorTheme, id => setTheme(id), { immediate: true });
+  watch(lang, value => (locale.value = value), { immediate: true });
 
   w3n.connectivity?.isOnline().then(res => setConnectivityStatus(res.includes('online')));
 
@@ -127,19 +145,9 @@ export function useAppView() {
 
       await getAppVersion();
       await getUser();
-      await getAppConfig();
+      await readAndStartWatchingAppConfig();
       await getConnectivityStatus();
       await getAppStorageSettings();
-
-      const config = await SystemSettings.makeResourceReader();
-      config.watchConfig({
-        next: appConfig => {
-          const { lang, colorTheme, customLogo } = appConfig;
-          setLang(lang);
-          setColorTheme(colorTheme);
-          setCustomLogo(customLogo);
-        },
-      });
 
       const storageSrvConnection = await w3n.rpc!.thisApp!('AppStorageInternal');
       const storageSrv = makeServiceCaller(storageSrvConnection, [], ['watchEvent']) as StorageAppDenoService;
@@ -327,6 +335,8 @@ export function useAppView() {
   });
 
   onBeforeUnmount(() => {
+    stopWatchingAppConfig();
+
     if (connectivityTimerId.value) {
       clearInterval(connectivityTimerId.value);
     }

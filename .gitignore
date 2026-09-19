@@ -29,9 +29,11 @@ yarn-error.log*
 *.njsproj
 *.sln
 *.sw?
+*.log
 
 # Tmp files
 .~*
 /components.d.ts
 .ollamassist/
+.kilo
 plans/

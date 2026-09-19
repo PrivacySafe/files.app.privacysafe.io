@@ -1,3 +1,5 @@
+import type { ThemeId } from '@v1nt1248/3nclient-lib/plugins';
+
 export type WritableFS = web3n.files.WritableFS;
 export type ListingEntry = web3n.files.ListingEntry;
 export type StorageUse = web3n.storage.StorageUse;
@@ -8,13 +10,11 @@ export type FileW = web3n.files.File;
 
 export type AvailableLanguage = 'en';
 
-export type AvailableColorTheme = 'default' | 'dark' | 'dark2';
-
 export type ConnectivityStatus = 'offline' | 'online';
 
 export type AppConfig = {
   lang: AvailableLanguage;
-  colorTheme: AvailableColorTheme;
+  colorTheme: ThemeId;
   systemFoldersDisplaying?: boolean;
   customLogo?: string;
 };
@@ -23,20 +23,20 @@ export interface AppConfigsInternal {
   getSettingsFile: () => Promise<AppSettings>;
   saveSettingsFile: (data: AppSettings) => Promise<void>;
   getCurrentLanguage: () => Promise<AvailableLanguage>;
-  getCurrentColorTheme: () => Promise<AvailableColorTheme>;
+  getCurrentColorTheme: () => Promise<ThemeId>;
   getSystemFoldersDisplaying: () => Promise<boolean>;
 }
 
 export interface AppConfigs {
   getCurrentLanguage: () => Promise<AvailableLanguage>;
-  getCurrentColorTheme: () => Promise<AvailableColorTheme>;
+  getCurrentColorTheme: () => Promise<ThemeId>;
   getSystemFoldersDisplaying: () => Promise<boolean>;
   watchConfig(obs: web3n.Observer<AppConfig>): () => void;
 }
 
 export interface SettingsJSON {
   lang: AvailableLanguage;
-  colorTheme: AvailableColorTheme;
+  colorTheme: ThemeId;
   systemFoldersDisplaying: boolean;
 }
 

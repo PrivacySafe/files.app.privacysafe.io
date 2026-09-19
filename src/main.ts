@@ -8,6 +8,7 @@ import {
   storeDialogs,
   storeVueBus,
   storeNotifications,
+  theme,
   vueBus,
 } from '@v1nt1248/3nclient-lib/plugins';
 
@@ -41,7 +42,15 @@ initializationServices()
 
     dayjs.extend(relativeTime);
 
-    app.use(pinia).use(i18n).use(vueBus).use(dialogs).use(notifications).use(router).mount('#main');
+    app
+      .use(theme, { theme: 'dark' })
+      .use(pinia)
+      .use(i18n)
+      .use(vueBus)
+      .use(dialogs)
+      .use(notifications)
+      .use(router)
+      .mount('#main');
   })
   .catch(err => {
     console.error('🔥 ERROR CREATE APP. ', err);

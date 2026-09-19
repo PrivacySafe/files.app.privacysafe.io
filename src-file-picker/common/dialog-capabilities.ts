@@ -40,25 +40,25 @@ function beginDialogRequest<M extends DialogMode>(
 }
 
 function createOpenFileHandler(dialogRequest: DialogRequestState): web3n.shell.files.OpenFileDialog {
-  return (title, btnLabel, multiSelections, filters) =>
+  return (title, btnLabel, multiSelections, opts) =>
     new Promise<web3n.files.ReadonlyFile[] | undefined>(resolve => {
       beginDialogRequest(dialogRequest, 'openFile', resolve, {
         title,
         btnLabel,
         multiSelections,
-        filters,
+        filters: opts?.filters,
       });
     });
 }
 
 function createSaveFileHandler(dialogRequest: DialogRequestState): web3n.shell.files.SaveFileDialog {
-  return (title, btnLabel, defaultPath, filters) =>
+  return (title, btnLabel, defaultPath, opts) =>
     new Promise<web3n.files.WritableFile | undefined>(resolve => {
       beginDialogRequest(dialogRequest, 'saveFile', resolve, {
         title,
         btnLabel: btnLabel || '',
         defaultPath,
-        filters,
+        filters: opts?.filters,
       });
     });
 }

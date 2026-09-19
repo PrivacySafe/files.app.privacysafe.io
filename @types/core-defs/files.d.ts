@@ -70,6 +70,7 @@ declare namespace web3n.files {
 		type: 'fs-sync';
 		path: string;
 		localVersion?: number;
+		uploadVersion?: number;
 		remoteVersion?: number;
 		alreadyUploading?: true;
 		uploadTaskId?: number;
@@ -314,7 +315,7 @@ declare namespace web3n.files {
 		 * sink with this error. When err is given, no errors will be thrown back
 		 * to this call.
 		 */
-		done(err?: any, xattrChanges?: XAttrsChanges): Promise<void>;
+		done(err?: any): Promise<void>;
 
 	}
 
@@ -1172,33 +1173,39 @@ declare namespace web3n.files {
 
 	interface FileChangeEvent extends FSChangeEvent {
 		type: 'file-change';
-		newVersion?: number;
+		newVersion: number;
 	}
 
 	type RemoteEvent = RemoteVersionArchivalEvent | RemoteArchVerRemovalEvent |
 		RemoteRemovalEvent | RemoteChangeEvent;
 
+	/**
+	 * SyncStatus has fields that connect to item's parent, uploading, i.e. not just state of the item.
+	 * Hence, we pick only related fields.
+	 */
+	type ItemSyncStatus = Pick<SyncStatus, 'state' | 'remote' | 'synced' | 'local'>;
+
 	interface RemoteVersionArchivalEvent extends FSEvent {
 		type: 'remote-version-archival';
 		archivedVersion: number;
-		syncStatus: SyncStatus;
+		syncStatus: ItemSyncStatus;
 	}
 
 	interface RemoteArchVerRemovalEvent extends FSEvent {
 		type: 'remote-arch-ver-removal';
 		removedArchVer: number;
-		syncStatus: SyncStatus;
+		syncStatus: ItemSyncStatus;
 	}
 
 	interface RemoteRemovalEvent extends FSEvent {
 		type: 'remote-removal';
-		syncStatus: SyncStatus;
+		syncStatus: ItemSyncStatus;
 	}
 
 	interface RemoteChangeEvent extends FSEvent {
 		type: 'remote-change';
 		newRemoteVersion: number;
-		syncStatus: SyncStatus;
+		syncStatus: ItemSyncStatus;
 	}
 
 	type UploadEvent = UploadStartEvent | UploadProgressEvent | UploadDisconnectedEvent | UploadDoneEvent;
@@ -1675,8 +1682,8 @@ declare namespace web3n.files {
 		upload(path: string, opts?: OptionsToUploadLocal): Promise<number|undefined>;
 
 		/**
-		 * This method is for resolving conflicts on folders.
-		 * It adopts given folder item, that is present in remote version and is missing in local version.
+		 * This method is for resolving conflicts on folders, an action item by item.
+		 * It adopts only given folder item, that is present in remote version and is missing in local version.
 		 * Returns new local version.
 		 * @param path 
 		 * @param remoteItemName 
@@ -1688,7 +1695,9 @@ declare namespace web3n.files {
 
 		/**
 		 * This method is for resolving conflicts on folders.
-		 * It absorbs folder changes done in remote version.
+		 * It completely absorbs folder changes done in remote version.
+		 * Such wholesome may or may not be appriate in all circumstances, so use `adoptRemoteFolderItem`
+		 * for a more nuanced item-by-item operations.
 		 * Returns new local version, if there were remote items to adopt and their were added to local state.
 		 * @param path 
 		 * @param opts

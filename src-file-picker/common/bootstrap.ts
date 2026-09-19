@@ -1,6 +1,6 @@
 import { createApp, type Component } from 'vue';
 import { createPinia } from 'pinia';
-import { dialogs, vueBus, notifications, storeNotifications } from '@v1nt1248/3nclient-lib/plugins';
+import { dialogs, vueBus, notifications, storeNotifications, theme } from '@v1nt1248/3nclient-lib/plugins';
 import i18n from '@/data/i18';
 
 import {
@@ -30,7 +30,7 @@ export function bootstrapPicker({ rootComponent, mountSelector }: PickerBootstra
       app.config.compilerOptions.isCustomElement = tag => tag.startsWith('ui3n-');
 
       app.provide(DIALOG_REQUEST_KEY, dialogRequest);
-      app.use(pinia).use(i18n).use(vueBus).use(dialogs).use(notifications);
+      app.use(theme, { theme: 'dark' }).use(pinia).use(i18n).use(vueBus).use(dialogs).use(notifications);
 
       // Install Pinia on the app before creating the picker store so Pinia
       // plugins receive the same app context they do during normal component

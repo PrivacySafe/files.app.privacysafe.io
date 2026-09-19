@@ -285,6 +285,7 @@ declare namespace web3n.caps {
 		openInMountedFolder?: OpenInMountedFolderCAPSetting;
 		openURL?: OpenURLWhitelistEntry[];
 		clipboard?: ClipboardCAPSetting;
+		scanUrlQR?: true;
 	}
 
 	type FileDialogsCAPSettings = 'all' | 'readonly';

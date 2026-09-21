@@ -3,7 +3,8 @@
   "appDomain": "files.app.privacysafe.io",
   "icon": "logo.png",
   "description": "Feature-rich file manager for secure storage of your digital assets.",
-  "version": "0.8.6",
+  "version": "0.8.7",
+  "tags": ["beta"],
 
   "components": {
     "/index.html": {
@@ -12,8 +13,7 @@
       "formFactor": ["desktop", "tablet"],
       "capsRequested": {
         "apps": "opener",
-        "logout": "all",
-        "log": "all",
+        "logToPlatform": true,
         "mailerid": true,
         "shell": {
           "fileDialog": "all",
@@ -54,7 +54,7 @@
       "childOfGUICaller": true,
       "forOneConnectionOnly": true,
       "capsRequested": {
-        "log": "all",
+        "logToPlatform": true,
         "shell": {
           "clipboard": "all",
           "fsResource": {
@@ -88,7 +88,7 @@
       "childOfGUICaller": true,
       "forOneConnectionOnly": true,
       "capsRequested": {
-        "log": "all",
+        "logToPlatform": true,
         "shell": {
           "clipboard": "all",
           "fsResource": {
@@ -124,7 +124,7 @@
       "runtime": "deno",
       "capsRequested": {
         "appRPC": ["AppStorageInternal"],
-        "log": "all",
+        "logToPlatform": true,
         "mailerid": true,
         "shell": {
           "fileDialog": "all",
@@ -149,6 +149,15 @@
       "description": "Feature-rich file manager for secure storage of your digital assets.",
       "component": "/index.html",
       "formFactor": ["desktop", "tablet"]
+    }
+  ],
+
+  "launchOnSystemStartup": [
+    {
+      "name": "Storage service",
+      "component": "/storageDenoServices.js.js",
+      "icon": "logo.png",
+      "description": "Feature-rich file manager for secure storage of your digital assets."
     }
   ]
 }

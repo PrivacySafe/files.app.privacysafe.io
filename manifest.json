@@ -3,8 +3,16 @@
   "appDomain": "files.app.privacysafe.io",
   "icon": "logo.png",
   "description": "Feature-rich file manager for secure storage of your digital assets.",
-  "version": "0.8.8",
+  "version": "0.8.9",
   "tags": ["beta"],
+
+  "publisher": "Ivy Cyber",
+  "website": "https://privacysafe.app",
+  "contact": "support@ivycyber.com",
+  "policy": "https://ivycyber.com/privacy",
+  "terms": "https://ivycyber.com/terms",
+  "license": "AGPL-3.0-or-later",
+  "source": "https://github.com/PrivacySafe/storage.app.privacysafe.io",
 
   "components": {
     "/index.html": {

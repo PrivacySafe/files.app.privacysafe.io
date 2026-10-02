@@ -1,11 +1,8 @@
 <script lang="ts" setup>
   import { computed } from 'vue';
-  import { useI18n } from 'vue-i18n';
   import { usePickerState } from '@picker/common/composables/usePickerState';
   import { Ui3nButton, Ui3nBreadcrumb, Ui3nBreadcrumbs } from '@v1nt1248/3nclient-lib';
 
-  const emit = defineEmits<{ newFolder: [] }>();
-  const { t } = useI18n();
   const picker = usePickerState();
   const segments = computed(() => picker.currentWindow.value.currentPath.split('/').filter(Boolean));
 
@@ -44,16 +41,6 @@
         </ui3n-breadcrumb>
       </ui3n-breadcrumbs>
     </div>
-
-    <ui3n-button
-      icon="outline-folder"
-      icon-position="left"
-      :disabled="picker.isBusy.value || !picker.canWrite.value || picker.currentWindow.value.status !== 'ready'"
-      :class="$style.newFolderButton"
-      @click="emit('newFolder')"
-    >
-      {{ t('file_picker.button.new_folder') }}
-    </ui3n-button>
   </div>
 </template>
 
@@ -70,15 +57,7 @@
     flex-shrink: 0;
     border: 1px solid var(--color-border-block-primary-default) !important;
   }
-
-  .newFolderButton {
-    flex-shrink: 0;
-    white-space: nowrap;
-  }
-
   .crumbsHolder {
-    flex: 1;
-    overflow: hidden;
     min-width: 0;
     font-size: var(--font-14);
   }

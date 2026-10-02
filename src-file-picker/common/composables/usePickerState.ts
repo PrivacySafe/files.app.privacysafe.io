@@ -8,7 +8,6 @@ import type { ListingEntryExtended, RootFsFolderView } from '@shared/types';
 import type { PickerState, PickerWindowState, PickerFile, PickerRootId } from '@picker/common/types';
 import type { DialogRequestState } from '@picker/common/types/dialog-types';
 import { isValidFileName } from '@picker/common/utils/validate-filename';
-import { openFolderTarget, type PickerFolderTarget } from '@picker/common/utils/folder-operations';
 
 function createDefaultWindowState(): PickerWindowState {
   return {
@@ -46,9 +45,6 @@ function parseDefaultSaveLocation(defaultPath?: string): DefaultSaveLocation {
   }
 
   const segments = path.split('/').filter(Boolean);
-  if (segments.some(segment => segment === '.' || segment === '..')) {
-    return { folderPath: '', fileName: '' };
-  }
   if (pointsToFolder) {
     return {
       folderPath: segments.join('/'),
@@ -78,20 +74,16 @@ function createPickerState(dialogRequest: DialogRequestState) {
     windows: {},
   });
 
-  const isBusy = ref(false);
-  const isSaveMode = computed(() => dialogRequest.mode === 'saveFile' || dialogRequest.mode === 'saveFolder');
-  const isFolderMode = computed(() => dialogRequest.mode === 'openFolder' || dialogRequest.mode === 'saveFolder');
-
   const defaultSaveLocation = computed(() => parseDefaultSaveLocation(dialogRequest.defaultPath));
 
   // null means the user has not edited the field yet. Until then the filename
   // is derived from dialogRequest.defaultPath, including a full path delivered
   // after the picker state was created.
-  const saveNameOverride = ref<string | null>(null);
-  const saveName = computed({
-    get: () => saveNameOverride.value ?? defaultSaveLocation.value.fileName,
+  const saveFileNameOverride = ref<string | null>(null);
+  const saveFileName = computed({
+    get: () => saveFileNameOverride.value ?? defaultSaveLocation.value.fileName,
     set: (name: string) => {
-      saveNameOverride.value = name;
+      saveFileNameOverride.value = name;
     },
   });
 
@@ -135,10 +127,7 @@ function createPickerState(dialogRequest: DialogRequestState) {
 
   async function getWritableFs(rootId: PickerRootId): Promise<web3n.files.WritableFS> {
     const fs = await getFs(rootId);
-    if (!fs.writable || !('writableSubRoot' in fs)) {
-      throw new Error('The selected filesystem is read-only.');
-    }
-    return fs;
+    return fs as unknown as web3n.files.WritableFS;
   }
 
   function mapListingEntry(entry: ListingEntryExtended, path: string): PickerFile {
@@ -186,7 +175,7 @@ function createPickerState(dialogRequest: DialogRequestState) {
   }
 
   async function switchRoot(rootId: PickerRootId): Promise<void> {
-    if (isBusy.value || !rootId) {
+    if (!rootId) {
       return;
     }
 
@@ -211,15 +200,12 @@ function createPickerState(dialogRequest: DialogRequestState) {
     }
   }
 
-  async function navigateToFolder(path: string): Promise<void> {
-    if (isBusy.value) {
-      return;
-    }
+  function navigateToFolder(path: string): Promise<void> {
     return loadEntries(state.activeRootId, path);
   }
 
   async function restoreLocation(rootId: PickerRootId, path: string): Promise<void> {
-    if (isBusy.value || !rootId) {
+    if (!rootId) {
       return;
     }
     state.activeRootId = rootId;
@@ -231,11 +217,11 @@ function createPickerState(dialogRequest: DialogRequestState) {
     currentWindow.value.sortOrder = sortOrder;
   }
 
-  function isSaveNameValid(name: string): boolean {
+  function isSaveFileNameValid(name: string): boolean {
     return isValidFileName(name);
   }
 
-  function findNameCollision(name: string): PickerFile | undefined {
+  function findFileNameCollision(name: string): PickerFile | undefined {
     if (!name) {
       return undefined;
     }
@@ -243,7 +229,7 @@ function createPickerState(dialogRequest: DialogRequestState) {
   }
 
   async function initializeDefaultRoot(rootId: PickerRootId): Promise<void> {
-    const initialPath = isSaveMode.value ? defaultSaveLocation.value.folderPath : '';
+    const initialPath = dialogRequest.mode === 'saveFile' ? defaultSaveLocation.value.folderPath : '';
     state.activeRootId = rootId;
     await loadEntries(rootId, initialPath);
 
@@ -275,79 +261,25 @@ function createPickerState(dialogRequest: DialogRequestState) {
   async function resolveSaveFile(): Promise<web3n.files.WritableFile> {
     const fs = await getWritableFs(state.activeRootId);
     const path = currentWindow.value.currentPath
-      ? `${currentWindow.value.currentPath}/${saveName.value}`
-      : saveName.value;
+      ? `${currentWindow.value.currentPath}/${saveFileName.value}`
+      : saveFileName.value;
     return fs.writableFile(path);
-  }
-
-  const canWrite = computed(() => {
-    const root = findRoot(state.activeRootId);
-    return !!root && fsList.value[root.fsId]?.entity.writable === true;
-  });
-
-  async function getFolderTarget(name = ''): Promise<PickerFolderTarget> {
-    const rootId = state.activeRootId;
-    const parentPath = currentWindow.value.currentPath;
-    const trimmed = name.trim();
-    if (trimmed && !isValidFileName(trimmed)) {
-      throw new Error('Invalid folder name.');
-    }
-    const fs = await getWritableFs(rootId);
-    return {
-      fs,
-      path: trimmed ? (parentPath ? `${parentPath}/${trimmed}` : trimmed) : parentPath || '/',
-      name: trimmed || parentPath.split('/').pop() || fs.name || findRoot(rootId)?.name || '/',
-    };
-  }
-
-  async function createFolder(name: string): Promise<void> {
-    if (!isValidFileName(name)) {
-      throw new Error('Invalid folder name.');
-    }
-    const rootId = state.activeRootId;
-    const target = await getFolderTarget(name);
-    await target.fs.makeFolder(target.path, true);
-    // This is an explicit user creation. Keep the folder if the picker is
-    // subsequently cancelled; enter it without settling the calling app.
-    await loadEntries(rootId, target.path);
-  }
-
-  async function resolveSelectedFolders(paths: string[]): Promise<web3n.files.WritableFS[]> {
-    const fs = await getWritableFs(state.activeRootId);
-    const folders: web3n.files.WritableFS[] = [];
-    try {
-      for (const path of paths) {
-        folders.push(await openFolderTarget({ fs, path: path || '/', name: '' }));
-      }
-      return folders;
-    } catch (error) {
-      // If one selection fails, release only the sub-roots we opened here.
-      await Promise.allSettled(folders.map(folder => folder.close()));
-      throw error;
-    }
   }
 
   return {
     activeRootId: computed(() => state.activeRootId),
     activeFsId,
     categories,
-    isBusy,
-    isSaveMode,
-    isFolderMode,
-    canWrite,
-    saveName,
+    saveFileName,
     currentWindow,
     switchRoot,
     navigateToFolder,
     restoreLocation,
     setSort,
-    findNameCollision,
-    isSaveNameValid,
+    findFileNameCollision,
+    isSaveFileNameValid,
     resolveSelectedFiles,
     resolveSaveFile,
-    getFolderTarget,
-    createFolder,
-    resolveSelectedFolders,
   };
 }
 

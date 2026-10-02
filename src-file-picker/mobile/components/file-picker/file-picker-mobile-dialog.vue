@@ -29,7 +29,7 @@
   const tableComponent = ref<Nullable<PickerTableComponent>>(null);
   const selectedRows = computed(() => tableComponent.value?.selectedRowsArray || ([] as PickerTableRow[]));
 
-  const { handleConfirm, handleRowConfirm, handleCancel, handleNewFolder } = usePickerDialogActions(
+  const { handleConfirm, handleRowConfirm, handleCancel } = usePickerDialogActions(
     dialogRequest,
     picker,
     selectedRows,
@@ -38,16 +38,13 @@
 </script>
 
 <template>
-  <div
-    :class="$style.filePickerMobileDialog"
-    :inert="picker.isBusy.value"
-  >
+  <div :class="$style.filePickerMobileDialog">
     <picker-mobile-header
       :selected-rows="selectedRows"
       @cancel="handleCancel"
     />
     <picker-mobile-tabs />
-    <picker-breadcrumb @new-folder="handleNewFolder" />
+    <picker-breadcrumb />
 
     <div :class="$style.content">
       <picker-mobile-file-list

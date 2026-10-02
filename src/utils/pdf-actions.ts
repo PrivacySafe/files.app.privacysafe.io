@@ -8,13 +8,14 @@ pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker;
  * !!! byteArray will be consumed
  * */
 export async function createPdfThumbnail(byteArray: Uint8Array, targetSize: number): Promise<string> {
-  let pdf;
+  let loadingTask: pdfjs.PDFDocumentLoadingTask | undefined;
   try {
-    pdf = await pdfjs.getDocument({
+    loadingTask = pdfjs.getDocument({
       data: byteArray,
       disableFontFace: true,
       verbosity: 0,
-    }).promise;
+    });
+    const pdf = await loadingTask.promise;
     // !!! in this code line byte array is already empty
     const page1 = await pdf.getPage(1);
     const viewport = page1.getViewport({ scale: 1 });
@@ -38,8 +39,8 @@ export async function createPdfThumbnail(byteArray: Uint8Array, targetSize: numb
     console.error('Error generating PDF preview:', e);
     throw e;
   } finally {
-    if (pdf) {
-      await pdf.destroy();
+    if (loadingTask) {
+      await loadingTask.destroy();
     }
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "files.app.privacysafe.io",
-  "version": "0.8.13",
+  "version": "0.8.14",
   "description": "Apps Storage",
   "author": "3NSoft, Inc.",
   "license": "GPL-3.0",
@@ -44,6 +44,7 @@
     "@vitejs/plugin-vue": "6.0.10",
     "@vue/devtools": "8.2.1",
     "@vue/eslint-config-typescript": "14.9.0",
+    "esbuild": "0.28.2",
     "eslint": "10.12.0",
     "eslint-config-prettier": "10.1.8",
     "eslint-plugin-import": "2.32.0",

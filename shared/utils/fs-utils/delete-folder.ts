@@ -26,7 +26,7 @@ export async function deleteFolder({
   stopErrorPropagate?: boolean;
 }): Promise<void> {
   try {
-    return fs.deleteFolder(path, removeContent);
+    return await fs.deleteFolder(path, removeContent);
   } catch (err) {
     console.log(
       `🔥 [deleteFolder] Error deleting the folder '${path}' . 'stopErrorPropagate' flag is ${stopErrorPropagate} .`,

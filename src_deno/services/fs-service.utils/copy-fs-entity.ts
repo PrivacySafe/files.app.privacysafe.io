@@ -43,6 +43,7 @@ export async function copyFsEntity({
   try {
     const entityNewPath = await getEntityTargetPath({
       fs: targetFs,
+      srcFs,
       entity,
       targetFolder,
       targetEntityName,

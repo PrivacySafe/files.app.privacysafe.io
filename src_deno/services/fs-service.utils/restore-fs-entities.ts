@@ -19,9 +19,15 @@ import type { FsListItem, ListingEntryExtended } from '../../../shared/types/ind
 import type { FavoritesService } from '../../types.ts';
 import { moveFsEntity, prepareRestoredPath } from '../../../shared/utils/fs-utils/index.ts';
 import { deleteFsEntities } from './delete-fs-entities.ts';
-import { USER_FS, USER_LOCAL_FS } from '../../../shared/constants';
-import { removeXAttrs } from './actions-on-x-attrs';
+import { USER_FS, USER_LOCAL_FS } from '../../../shared/constants/index.ts';
+import { removeXAttrs } from './actions-on-x-attrs.ts';
 
+/**
+ * Restores trashed entities one by one. Each entity is resolved against the
+ * current state of its original folder, so entities restored earlier in the
+ * same batch are taken into account. A failure of one entity is logged and
+ * does not stop the others; the result contains only restored entities.
+ */
 export async function restoreFsEntities({
   fsListItem,
   entities,
@@ -34,48 +40,38 @@ export async function restoreFsEntities({
   trashFolderName: string;
   mode: 'keep' | 'replace';
   favoritesSrv: FavoritesService;
-}): Promise<Record<string, string> | undefined> {
-  try {
-    const { entity: fs, fsId } = fsListItem;
+}): Promise<Record<string, string>> {
+  const { entity: fs, fsId } = fsListItem;
+  const mappingPathToRestorePath = {} as Record<string, string>;
 
-    const mappingPathToRestorePath = {} as Record<string, string>;
-    const entitiesToPreDelete = [] as ListingEntryExtended[];
+  for (const entity of entities) {
+    try {
+      const { restoredPath, conflict } = await prepareRestoredPath({ fs, entity, mode });
 
-    for (const entity of entities) {
-      const { restoredPath, toDelete } = await prepareRestoredPath({ fs, entity, mode });
-      mappingPathToRestorePath[entity.fullPath] = restoredPath;
-      if (toDelete) {
-        entitiesToPreDelete.push(entity);
-      }
-    }
-
-    if (mode === 'replace' && entitiesToPreDelete.length > 0) {
-      await deleteFsEntities({
-        fsListItem,
-        entities: entitiesToPreDelete,
-        trashFolderName,
-        completely: true,
-        favoritesSrv,
-      });
-    }
-
-    for (const entity of entities) {
-      await moveFsEntity({ fs, src: entity.fullPath, dst: mappingPathToRestorePath[entity.fullPath] });
-      if ([USER_FS, USER_LOCAL_FS].includes(fsId)) {
-        await removeXAttrs({
-          fs,
-          path: mappingPathToRestorePath[entity.fullPath],
-          attrs: ['parentFolder', 'originalName'],
+      if (mode === 'replace' && conflict) {
+        await deleteFsEntities({
+          fsListItem,
+          entities: [conflict as ListingEntryExtended],
+          trashFolderName,
+          completely: true,
+          favoritesSrv,
         });
       }
-    }
 
-    return mappingPathToRestorePath;
-  } catch (err) {
-    w3n.log(
-      'error',
-      `Error while restore entities ${entities.map(e => e.originalName || e.name).join(', ')}. `,
-      err,
-    );
+      await moveFsEntity({ fs, src: entity.fullPath, dst: restoredPath });
+      // the entity is back in place and has to be synced, whatever happens to its xattrs
+      mappingPathToRestorePath[entity.fullPath] = restoredPath;
+
+      if ([USER_FS, USER_LOCAL_FS].includes(fsId)) {
+        // stale trash marks outside of the trash are ignored, so a failure here is only logged
+        await removeXAttrs({ fs, path: restoredPath, attrs: ['parentFolder', 'originalName'] }).catch(err =>
+          w3n.log('error', `Error removing the trash marks of the restored '${restoredPath}'. `, err),
+        );
+      }
+    } catch (err) {
+      await w3n.log('error', `Error while restoring ${entity.originalName || entity.name}. `, err);
+    }
   }
+
+  return mappingPathToRestorePath;
 }

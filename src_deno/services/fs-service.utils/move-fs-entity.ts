@@ -19,6 +19,7 @@ import {
   deleteFolder,
   deleteFile,
   deleteLink,
+  joinEntityPath,
   moveFsEntity as _moveFsEntity,
 } from '../../../shared/utils/fs-utils/index.ts';
 import { copyFsEntity } from './copy-fs-entity.ts';
@@ -42,7 +43,7 @@ export async function moveFsEntity({
     const { entity: fs, fsId } = fsListItem;
     const { entity: targetFs, fsId: targetFolderId } = targetFsListItem;
 
-    const dstPath = `${targetFolder}/${targetEntityName || name}`;
+    const dstPath = joinEntityPath(targetFolder, targetEntityName || name);
 
     if (fsId === targetFolderId) {
       await _moveFsEntity({ fs, src: fullPath, dst: dstPath });

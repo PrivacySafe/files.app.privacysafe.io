@@ -65,7 +65,7 @@
 
   .sectionDivider {
     height: 1px;
-    margin: 8px 8px;
+    margin: 8px;
     background-color: var(--color-border-block-primary-default);
   }
 
@@ -97,6 +97,7 @@
     &:hover {
       background-color: color-mix(in srgb, var(--color-bg-control-primary-hover) 30%, transparent);
     }
+
     &.active {
       background-color: var(--color-bg-control-primary-hover);
     }

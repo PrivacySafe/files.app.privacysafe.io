@@ -36,6 +36,7 @@
     padding: 12px 16px;
     border-top: 1px solid var(--color-border-block-primary-default);
   }
+
   .confirmBtn {
     width: 100%;
     border-radius: 24px !important;

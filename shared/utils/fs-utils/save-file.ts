@@ -28,7 +28,7 @@ export async function saveFile({
   stopErrorPropagate?: boolean;
 }): Promise<void> {
   try {
-    return fs.saveFile(file, dst, overwrite);
+    return await fs.saveFile(file, dst, overwrite);
   } catch (err) {
     console.log(
       `🔥 [saveFile] Error saving file '${file.name}' . 'stopErrorPropagate' flag is ${stopErrorPropagate} .`,

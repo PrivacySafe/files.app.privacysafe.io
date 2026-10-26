@@ -33,7 +33,7 @@ export async function getListFolder(args: GetListFolderBaseArgs & { vAPI: boolea
 
   try {
     if (vAPI) {
-      return fs.v?.listFolder(folderName, flags);
+      return await fs.v?.listFolder(folderName, flags);
     }
 
     return await fs.listFolder(folderName);

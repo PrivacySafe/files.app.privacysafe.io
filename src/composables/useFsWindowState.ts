@@ -1,6 +1,6 @@
 import { computed, type ComputedRef } from 'vue';
 import { storeToRefs } from 'pinia';
-import { useAppStore, useFsStore } from '@/store';
+import { useFsStore } from '@/store';
 import { useNavigation } from '@/composables/useNavigation';
 import {
   USER_FS,
@@ -25,8 +25,7 @@ export function useFsWindowState(fsWindowNumber: ComputedRef<'1' | '2'>) {
     window2SortOrder,
   } = useNavigation();
 
-  const { trashFolderName } = storeToRefs(useAppStore());
-  const { fsList } = storeToRefs(useFsStore());
+  const { fsList, trashFolderName } = storeToRefs(useFsStore());
 
   const currentWindowFsId = computed(() => (fsWindowNumber.value === '1' ? window1FsId.value : window2FsId.value!));
 
@@ -37,7 +36,7 @@ export function useFsWindowState(fsWindowNumber: ComputedRef<'1' | '2'>) {
   );
 
   const currentWindowRootFolderBasePath = computed(() =>
-    [USER_TRASH_FOLDER, USER_TRASH_LOCAL_FOLDER].includes(currentWindowRootFolderId.value) ? trashFolderName.value : '',
+    [USER_TRASH_FOLDER, USER_TRASH_LOCAL_FOLDER].includes(currentWindowRootFolderId.value) ? (trashFolderName.value ?? '') : '',
   );
 
   const currentWindowFolderPath = computed(() =>

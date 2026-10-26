@@ -48,7 +48,7 @@
       v-if="!isSaveMode"
       :class="$style.selectedBox"
     >
-      <span>{{ selectedRows.length }} {{ t('file_picker.selected_items') }}</span>
+      <span>{{ t('file_picker.selected_items', { count: selectedRows.length }, selectedRows.length) }}</span>
     </div>
 
     <div
@@ -107,11 +107,13 @@
     grid-template-columns: auto minmax(0, 1fr);
     margin-right: 12px;
   }
+
   .folderHint {
     grid-column: 1 / -1;
     font-size: var(--font-12);
     color: var(--color-text-control-secondary-default);
   }
+
   .footerPanel {
     display: flex;
     padding: 0 16px;
@@ -121,6 +123,7 @@
     align-content: center;
     min-height: 64px;
   }
+
   .selectedBox {
     display: flex;
     align-items: center;
@@ -132,17 +135,21 @@
       color: var(--color-text-control-primary-default);
     }
   }
+
   .saveAsLabel {
     flex-shrink: 0;
   }
+
   .nameEditable {
     min-width: 0;
   }
+
   .actionBox {
     display: flex;
     gap: 12px;
     flex-shrink: 0;
   }
+
   .footerBtn {
     min-width: 79px;
   }

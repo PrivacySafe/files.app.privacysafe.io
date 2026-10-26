@@ -102,9 +102,7 @@ async function processRemoteFolder(
 ): Promise<FolderListItem[]> {
   const list: FolderListItem[] = [];
 
-  console.log(`PROCESS REMOTE FOLDER [${folderPath}]`);
   const folderList = await folderFs.listFolder(folderPath);
-  console.log(`PROCESS REMOTE FOLDER LIST [${folderPath}] => `, folderList);
   for (const entity of folderList) {
     const { isFolder, name } = entity;
     const currentEntityFullPath = `${folderPath}/${name}`;

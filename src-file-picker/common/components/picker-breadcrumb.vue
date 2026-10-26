@@ -66,6 +66,7 @@
     color: var(--color-text-control-primary-default);
     border-bottom: 1px solid var(--color-border-block-primary-default);
   }
+
   .navButton {
     flex-shrink: 0;
     border: 1px solid var(--color-border-block-primary-default) !important;

@@ -29,6 +29,7 @@
 <style lang="scss" module>
   .fileType {
     border-radius: 3px;
+
     div:last-child {
       line-height: 14px !important;
     }

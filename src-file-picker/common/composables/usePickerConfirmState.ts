@@ -49,7 +49,7 @@ export function usePickerConfirmState(
       );
     }
     if (picker.isSaveMode.value) {
-      return t('file_picker.button.save');
+      return dialogRequest?.btnLabel || t('file_picker.button.save');
     }
     return dialogRequest?.btnLabel || t('file_picker.button.select');
   });

@@ -24,7 +24,7 @@ export async function deleteLink({
   stopErrorPropagate?: boolean;
 }): Promise<void> {
   try {
-    return fs.deleteLink(path);
+    return await fs.deleteLink(path);
   } catch (err) {
     console.log(
       `🔥 [deleteLink] Error deleting the link '${path}' . 'stopErrorPropagate' flag is ${stopErrorPropagate} .`,

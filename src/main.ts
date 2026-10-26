@@ -22,7 +22,7 @@ import '@v1nt1248/3nclient-lib/variables.css';
 import '@v1nt1248/3nclient-lib/style.css';
 import '@/assets/styles/main.css';
 
-import { initializationServices } from '@/services/services-provider';
+import { initializationServices, showStartupError } from '@/services/services-provider';
 
 initializationServices()
   .then(() => {
@@ -36,9 +36,6 @@ initializationServices()
 
     app.config.globalProperties.$router = router;
     // app.config.globalProperties.$store = store
-    app.config.compilerOptions.isCustomElement = tag => {
-      return tag.startsWith('ui3n-');
-    };
 
     dayjs.extend(relativeTime);
 
@@ -54,4 +51,5 @@ initializationServices()
   })
   .catch(err => {
     console.error('🔥 ERROR CREATE APP. ', err);
+    showStartupError();
   });

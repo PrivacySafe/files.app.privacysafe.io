@@ -17,6 +17,7 @@
 import type { ComputedRef } from 'vue';
 import { useNavigation } from '@/composables/useNavigation';
 import type { ListingEntryExtended } from '@shared/types';
+import { compareListingEntries } from '@/utils/sort-listing';
 
 export function useSort(fsFolderWindow: ComputedRef<'1' | '2'>) {
   const { isSplittedMode, navigateToRouteSingle, navigateToRouteDouble } = useNavigation();
@@ -50,20 +51,8 @@ export function useSort(fsFolderWindow: ComputedRef<'1' | '2'>) {
     b: ListingEntryExtended,
     field: keyof ListingEntryExtended,
     direction: 'asc' | 'desc',
-  ): -1 | 1 {
-    const aFieldValue = field === 'type' ? `${a.type === 'file' ? a.ext : '#'}-${a.name}` : a[field]!;
-    const aFieldValueProcessed = typeof aFieldValue === 'string' ? aFieldValue.toLowerCase() : aFieldValue;
-
-    const bFieldValue = field === 'type' ? `${b.type === 'file' ? b.ext : '#'}-${b.name}` : b[field]!;
-    const bFieldValueProcessed = typeof bFieldValue === 'string' ? bFieldValue.toLowerCase() : bFieldValue;
-
-    return aFieldValueProcessed > bFieldValueProcessed
-      ? direction === 'desc'
-        ? 1
-        : -1
-      : direction === 'desc'
-        ? -1
-        : 1;
+  ): number {
+    return compareListingEntries(a, b, field, direction);
   }
 
   return {

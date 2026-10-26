@@ -17,6 +17,7 @@
 /// <reference path="../../../@types/platform-defs/injected-w3n.d.ts" />
 import type { StorageEvent } from '../../../shared/types/index.ts';
 import { executeFunc } from '../../../shared/utils/execute-function.ts';
+import { formatPath } from '../../../shared/utils/various.ts';
 
 export async function syncAdopt({
   fs,
@@ -31,9 +32,8 @@ export async function syncAdopt({
   opts?: web3n.files.OptionsToAdopteRemote;
   emitEvent: (event: StorageEvent) => void;
   stopErrorPropagate?: boolean;
-  actionIfSuccess?: () => void;
+  actionIfSuccess?: () => void | Promise<void>;
 }): Promise<void> {
-  console.log(`[###] ADOPT START FOR '${path}' [###]`);
   emitEvent({
     event: 'adoptRemote:start',
     payload: { path: path.replace('./', '') },
@@ -47,13 +47,11 @@ export async function syncAdopt({
     timeoutValue: 0,
     actionIfError: err => {
       console.error(`🔥 ADOPT ERROR FOR '${path}' .`, err);
-
-      const { path: errPath } = err as web3n.files.FSSyncException;
       emitEvent({
         event: 'sync:error',
         payload: {
-          path: errPath.replace('./', ''),
-          message: (err as web3n.files.FSSyncException).message || JSON.stringify(err),
+          path: formatPath(path),
+          message: (err as web3n.files.FSSyncException)?.message || JSON.stringify(err),
         },
       });
     },

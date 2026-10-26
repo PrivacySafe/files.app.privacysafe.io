@@ -122,15 +122,20 @@ export function usePickerDialogActions(
     }
     picker.saveName.value = name;
 
-    const collision = picker.findNameCollision(name);
+    const collision = await picker.findSaveTargetCollision(name);
     if (collision?.isFolder) {
       showError('file_picker.notification.error.folder_name_collision');
+      return;
+    }
+    if (collision?.isLink) {
+      showError('file_picker.notification.error.link_name_collision');
       return;
     }
     if (collision) {
       const component = defineAsyncComponent(() => import('@picker/common/dialogs/file-collision-dialog.vue'));
       const result = await dialogs.$openDialog(component, {
         data: name,
+        strictNames: picker.strictNames.value,
         dialogProps: {
           title: t('dialog.file_exist.title'),
           cssStyle: { maxHeight: '95%' },
@@ -147,8 +152,10 @@ export function usePickerDialogActions(
         await handleSaveFileConfirm(name);
         return;
       }
+      // replacing the existing file (on a case-insensitive FS it may differ in case)
+      picker.saveName.value = collision.name;
     }
-    const file = await picker.resolveSaveFile();
+    const file = await picker.resolveSaveFile({ overwrite: !!collision });
     settleDialog(dialogRequest, file);
   }
 
@@ -195,6 +202,11 @@ export function usePickerDialogActions(
         showError('file_picker.notification.error.folder_target_conflict');
         return;
       }
+      if (!name) {
+        // "Use folder": the user has chosen the current folder explicitly
+        settleDialog(dialogRequest, await openFolderTarget(target));
+        return;
+      }
       await confirmExistingFolder(target);
       return;
     }
@@ -227,6 +239,7 @@ export function usePickerDialogActions(
       const component = defineAsyncComponent(() => import('@picker/common/dialogs/folder-name-dialog.vue'));
       await dialogs.$openDialog(component, {
         data: { name: '', create: picker.createFolder },
+        strictNames: picker.strictNames.value,
         dialogProps: {
           title: t('file_picker.button.new_folder'),
           cssStyle: { maxHeight: '95%' },

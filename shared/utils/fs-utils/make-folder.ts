@@ -26,7 +26,7 @@ export async function makeFolder({
   stopErrorPropagate?: boolean;
 }): Promise<void> {
   try {
-    return fs.makeFolder(path, exclusive);
+    return await fs.makeFolder(path, exclusive);
   } catch (err) {
     console.log(
       `🔥 [copyFolder] Error making the folder '${path}' . 'stopErrorPropagate' flag is ${stopErrorPropagate} .`,

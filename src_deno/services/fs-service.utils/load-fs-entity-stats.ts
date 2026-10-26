@@ -19,6 +19,7 @@ import { prepareFsEntityId, getFileExtension } from '../../../shared/utils/vario
 import { getFsStat } from '../../../shared/utils/fs-utils/get-fs-stat.ts';
 import { getXAttrs, listXAttrs } from './actions-on-x-attrs.ts';
 import type { ListingEntryExtended } from '../../../shared/types/index.ts';
+import { isValidListingXAttrValue } from './listing-xattrs.ts';
 
 export async function loadFsEntityStats({
   fs,
@@ -88,9 +89,9 @@ export async function loadFsEntityStats({
       fullPath,
       tags: value.tags || [],
       type: stats?.isFile ? 'file' : stats?.isFolder ? 'folder' : 'link',
-      ...(value.favoriteId && { favoriteId: value.favoriteId }),
+      ...(isValidListingXAttrValue('favoriteId', value.favoriteId) && { favoriteId: value.favoriteId }),
       ...(stats?.isFile && { ext: getFileExtension(name) }),
-      ...(value.thumbnail && { thumbnail: value.thumbnail }),
+      ...(isValidListingXAttrValue('thumbnail', value.thumbnail) && { thumbnail: value.thumbnail }),
       ...(stats && { ...stats }),
     };
   } catch (err) {

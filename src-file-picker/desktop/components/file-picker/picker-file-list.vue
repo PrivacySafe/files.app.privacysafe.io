@@ -162,6 +162,7 @@
       :class="$style.tableWrapper"
     >
       <ui3n-table
+        :key="picker.activeRootId.value"
         ref="tableComponent"
         :config="tableData.config"
         :head="tableData.head"
@@ -203,10 +204,12 @@
     height: 100%;
     overflow-y: auto;
   }
+
   .statusMessage {
     color: var(--color-text-control-secondary-default, #888);
     padding: 12px 0;
   }
+
   .tableWrapper {
     position: relative;
     height: 100%;
@@ -216,6 +219,7 @@
       overflow: visible !important;
     }
   }
+
   .loader {
     position: absolute;
     inset: 0;
@@ -226,6 +230,7 @@
     align-items: center;
     pointer-events: none;
   }
+
   .parentRow {
     display: flex;
     align-items: center;

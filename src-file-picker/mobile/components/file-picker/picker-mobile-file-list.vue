@@ -111,7 +111,7 @@
             :row="row"
             :is-row-selected="isRowSelected"
             :events="events"
-            :resolve-file-on-tap="dialogRequest?.mode === 'openFile'"
+            :resolve-file-on-tap="dialogRequest?.mode === 'openFile' && !dialogRequest.multiSelections"
             @navigate="handleNavigate"
             @confirm="handleConfirm"
           />
@@ -126,16 +126,20 @@
     height: 100%;
     color: var(--color-text-control-primary-default);
   }
+
   .statusMessage {
     color: var(--color-text-control-secondary-default, #888);
     padding: 12px 16px;
   }
+
   .tableWrapper {
     height: 100%;
     min-height: 0;
   }
+
   .tableClass {
     --ui3n-table-base-head-height: 0px;
+
     & > div:first-child {
       border-bottom: 1px solid var(--color-border-block-primary-default);
     }

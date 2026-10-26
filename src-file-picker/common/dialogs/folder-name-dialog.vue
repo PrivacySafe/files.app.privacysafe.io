@@ -13,6 +13,8 @@
 
   const props = defineProps<{
     dialogProps?: Ui3nDialogComponentProps<boolean>;
+    /** Windows naming rules; true unless the caller says otherwise */
+    strictNames?: boolean;
     data: {
       name: string;
       allowEmpty?: boolean;
@@ -28,7 +30,7 @@
   const errorKey = ref('');
   const valid = computed(() => {
     const trimmed = name.value.trim();
-    return (props.data.allowEmpty && !trimmed) || isValidFileName(trimmed);
+    return (props.data.allowEmpty && !trimmed) || isValidFileName(trimmed, { strict: props.strictNames !== false });
   });
 
   function handleAction(action: { event: Ui3nDialogEvent; data?: unknown }) {
@@ -76,8 +78,7 @@
         <span
           v-if="errorKey"
           role="alert"
-          >{{ t(errorKey) }}</span
-        >
+        >{{ t(errorKey) }}</span>
         <span
           v-else-if="name.trim() && !valid"
           role="alert"
@@ -117,9 +118,11 @@
     color: var(--color-text-control-primary-default);
     overflow-wrap: anywhere;
   }
+
   .nameInput {
     width: 100%;
   }
+
   .actionRow {
     display: flex;
     justify-content: flex-end;

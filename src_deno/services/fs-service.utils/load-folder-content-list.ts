@@ -49,11 +49,12 @@ export async function loadFolderContentList({
     return res?.lst || [];
   }
 
+  // A missing or unreadable folder is an error, not an empty folder: shown as
+  // empty, it would let the file picker save into a folder that does not exist.
   const res = await getListFolder({
     fs,
     folderName: path,
     vAPI: false,
-    stopErrorPropagate: true,
     actionIfError: err => handleError(err),
   });
   return res || [];

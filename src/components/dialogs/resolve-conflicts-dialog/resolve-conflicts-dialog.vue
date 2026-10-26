@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script setup lang="ts">
-  import { computed, onMounted, ref } from 'vue';
+  import { computed, inject, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { storeToRefs } from 'pinia';
   import size from 'lodash/size';
@@ -31,6 +31,7 @@
     type Ui3nDialogEvent,
   } from '@v1nt1248/3nclient-lib';
   import { getFileExtension } from '@v1nt1248/3nclient-lib/utils';
+  import { NOTIFICATIONS_KEY, type NotificationsPlugin } from '@v1nt1248/3nclient-lib/plugins';
   import { useFsStore, useSyncQueueStore } from '@/store';
   import {
     absorbRemoteFolderChanges as _absorbRemoteFolderChanges,
@@ -54,11 +55,14 @@
   }>();
 
   const { t } = useI18n();
+  const notifications = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
 
   const fsStore = useFsStore();
   const { getFs, getEntityStats, getSyncedStatus } = fsStore;
   const { trashFolderName } = storeToRefs(fsStore);
   const { getRootFolderSyncStatus } = useSyncQueueStore();
+
+  type ResolveAction = 'keepLocal' | 'keepCloud' | 'keepBoth' | 'absorb';
 
   const applyToAllObjects = ref(false);
   const currentResolvingPathIndex = ref(0);
@@ -74,180 +78,199 @@
 
   const isProcessOngoing = ref(false);
 
-  async function getCurrentEntityInfo() {
-    if (typeof currentResolvingPath.value !== 'string') {
-      return;
+  /**
+   * Shows the first path, starting from `index`, that is still conflicting.
+   * Paths resolved meanwhile (e.g. on another device) are skipped.
+   * Returns false when no conflicting path is left.
+   */
+  async function showConflictFrom(index: number): Promise<boolean> {
+    for (let i = index; i < props.paths.length; i += 1) {
+      currentResolvingPathIndex.value = i;
+      const path = currentResolvingPath.value;
+      const status = await getSyncedStatus({ fsId: USER_FS, fullPath: path });
+      const remoteVersion = status?.remote?.latest;
+      if (status?.state !== 'conflicting' || !remoteVersion) {
+        continue;
+      }
+
+      syncStatus.value = status;
+      statsLocal.value = await getEntityStats({ fsId: USER_FS, fullPath: path });
+      statsRemote.value = await getEntityStats({ fsId: USER_FS, fullPath: path, version: remoteVersion });
+      showCompareFolderTable.value = false;
+
+      const home = t('fs.folder_name.user_synced_home');
+      const currentParentFolder = getParentFolderPathFromEntityFullPath(path);
+      parentFolder.value = currentParentFolder ? `${home} / ${currentParentFolder.replaceAll('/', ' / ')}` : home;
+      return true;
     }
-
-    syncStatus.value = await getSyncedStatus({ fsId: USER_FS, fullPath: currentResolvingPath.value });
-    if (syncStatus.value && syncStatus.value.state !== 'conflicting') {
-      emits('action', { event: 'cancel', data: currentResolvingPath.value });
-      return;
-    }
-
-
-    statsLocal.value = await getEntityStats({ fsId: USER_FS, fullPath: currentResolvingPath.value });
-    statsRemote.value = await getEntityStats({
-      fsId: USER_FS,
-      fullPath: currentResolvingPath.value,
-      version: syncStatus.value!.remote!.latest!,
-    });
-    const currentParentFolder = getParentFolderPathFromEntityFullPath(currentResolvingPath.value);
-    parentFolder.value = currentParentFolder ? `Home / ${currentParentFolder.replaceAll('/', ' / ')}` : 'Home ';
-    console.log('SYNC STATUS => ', syncStatus.value);
-    console.log('STAT LOCAL => ', statsLocal.value);
-    console.log('STAT REMOTE => ', statsRemote.value);
+    return false;
   }
 
-  async function toggleFolderCompareDisplaying() {
-    console.log('toggleFolderCompareDisplaying');
+  function toggleFolderCompareDisplaying() {
     showCompareFolderTable.value = !showCompareFolderTable.value;
   }
 
-  async function actionAfterResolveEnd() {
-    if (!currentResolvingPath.value && typeof currentResolvingPath.value === 'string') {
+  async function refreshRootStatuses(path: string) {
+    if (path === '') {
       await getRootFolderSyncStatus('root');
       await getRootFolderSyncStatus('trash');
-    } else if (currentResolvingPath.value === trashFolderName.value) {
+    } else if (path === trashFolderName.value) {
       await getRootFolderSyncStatus('trash');
     }
+  }
 
-    if (currentResolvingPathIndex.value === props.paths.length - 1) {
-      emits('action', { event: 'confirm', data: true });
+  function isActionApplicable(action: ResolveAction): boolean {
+    if (action === 'keepBoth') {
+      return statsLocal.value?.type === 'file';
+    }
+    if (action === 'absorb') {
+      return statsLocal.value?.type === 'folder';
+    }
+    return true;
+  }
+
+  async function keepLocal(path: string, remoteVersion: number) {
+    await appStorageSrv.startSyncUpload({
+      path,
+      opts: { uploadVersion: remoteVersion + 1 },
+      stopErrorPropagate: false,
+    });
+  }
+
+  async function keepCloud(path: string, remoteVersion: number) {
+    const fs = getFs(USER_FS);
+    await appStorageSrv.startSyncAdopt({
+      path,
+      opts: { remoteVersion },
+      stopErrorPropagate: false,
+    });
+
+    const stats = await getFsStat({ fs, path, stopErrorPropagate: true });
+
+    const itShouldDownload =
+      stats &&
+      stats.isFile &&
+      stats.versionSyncBranch === 'synced' &&
+      stats.size &&
+      stats.size <= AUTOMATIC_DOWNLOAD_FILE_LIMIT_SIZE &&
+      stats.version;
+
+    if (itShouldDownload) {
+      await appStorageSrv.startSyncDownload({ path, version: stats.version! });
     } else {
-      currentResolvingPathIndex.value += 1;
-      await getCurrentEntityInfo();
+      await appStorageSrv.deleteSyncQueueItem(path);
     }
   }
 
-  async function keepLocal() {
-    if (!syncStatus.value?.remote?.latest) {
-      return;
-    }
+  async function keepBothFile(path: string) {
+    const fs = getFs(USER_FS);
+    const currentFileParentFolder = getParentFolderPathFromEntityFullPath(path);
+    const currentFileFullName = path.replace(`${currentFileParentFolder}/`, '');
+    const currentFileExt = getFileExtension(currentFileFullName);
+    const currentFileName = currentFileExt
+      ? currentFileFullName.replace(`.${currentFileExt}`, '')
+      : currentFileFullName;
+    const newItemName = `${currentFileName}_[ keep ]${currentFileExt ? `.${currentFileExt}` : ''}`;
 
-    try {
-      isProcessOngoing.value = true;
+    await adoptRemoteFolderItem({
+      fs,
+      path: currentFileParentFolder,
+      remoteItemName: currentFileFullName,
+      opts: { newItemName },
+    });
 
-      await appStorageSrv.startSyncUpload({
-        path: currentResolvingPath.value,
-        opts: { uploadVersion: syncStatus.value.remote.latest + 1 },
-      });
+    await appStorageSrv.startSyncUpload({ path: currentFileParentFolder, stopErrorPropagate: false });
+    const stats = await getFsStat({ fs, path });
 
-      await actionAfterResolveEnd();
-    } finally {
-      isProcessOngoing.value = false;
+    if (
+      stats &&
+      stats.versionSyncBranch === 'synced' &&
+      stats.size &&
+      stats.size <= AUTOMATIC_DOWNLOAD_FILE_LIMIT_SIZE &&
+      stats.version
+    ) {
+      await appStorageSrv.startSyncDownload({ path, version: stats.version });
     }
   }
 
-  async function keepCloud() {
-    if (!syncStatus.value?.remote?.latest) {
+  async function absorbRemoteFolderChanges(path: string, remoteVersion: number) {
+    const fs = getFs(USER_FS);
+    await _absorbRemoteFolderChanges({
+      fs,
+      path,
+      opts: { postfixForNameOverlaps: '_[ keep ]' },
+    });
+
+    await appStorageSrv.startSyncUpload({
+      path,
+      opts: { uploadVersion: remoteVersion + 1 },
+      stopErrorPropagate: false,
+    });
+  }
+
+  async function performAction(action: ResolveAction) {
+    const path = currentResolvingPath.value;
+    const remoteVersion = syncStatus.value!.remote!.latest!;
+
+    switch (action) {
+      case 'keepLocal':
+        return keepLocal(path, remoteVersion);
+      case 'keepCloud':
+        return keepCloud(path, remoteVersion);
+      case 'keepBoth':
+        return keepBothFile(path);
+      case 'absorb':
+        return absorbRemoteFolderChanges(path, remoteVersion);
+    }
+  }
+
+  /**
+   * Resolves the current conflict and moves to the next one. With "apply to
+   * all", the same action goes on for the next conflicts while it fits them.
+   * On an error the dialog stays at the failed conflict.
+   */
+  async function resolve(action: ResolveAction) {
+    if (isProcessOngoing.value || !syncStatus.value?.remote?.latest) {
       return;
     }
 
+    isProcessOngoing.value = true;
     try {
-      isProcessOngoing.value = true;
+      let nextAction: ResolveAction | null = action;
+      while (nextAction) {
+        const path = currentResolvingPath.value;
+        await performAction(nextAction);
+        await refreshRootStatuses(path);
 
-      const fs = getFs(USER_FS);
-      await appStorageSrv.startSyncAdopt({
-        path: currentResolvingPath.value,
-        opts: { remoteVersion: syncStatus.value.remote.latest },
-      });
+        const hasNextConflict = await showConflictFrom(currentResolvingPathIndex.value + 1);
+        if (!hasNextConflict) {
+          emits('action', { event: 'confirm', data: true });
+          return;
+        }
 
-      const stats = await getFsStat({ fs, path: currentResolvingPath.value, stopErrorPropagate: true });
-
-      const itShouldDownload =
-        stats &&
-        stats.isFile &&
-        stats.versionSyncBranch === 'synced' &&
-        stats.size &&
-        stats.size <= AUTOMATIC_DOWNLOAD_FILE_LIMIT_SIZE &&
-        stats.version;
-
-      if (itShouldDownload) {
-        await appStorageSrv.startSyncDownload({
-          path: currentResolvingPath.value,
-          version: stats.version!,
-        });
-      } else {
-        await appStorageSrv.deleteSyncQueueItem(currentResolvingPath.value);
+        nextAction = applyToAllObjects.value && isActionApplicable(action) ? action : null;
       }
-
-      await actionAfterResolveEnd();
-    } finally {
-      isProcessOngoing.value = false;
-    }
-  }
-
-  async function keepBothFile() {
-    try {
-      isProcessOngoing.value = true;
-
-      const fs = getFs(USER_FS);
-      const currentFileParentFolder = getParentFolderPathFromEntityFullPath(currentResolvingPath.value);
-      const currentFileFullName = currentResolvingPath.value.replace(`${currentFileParentFolder}/`, '');
-      const currentFileExt = getFileExtension(currentFileFullName);
-      const currentFileName = currentFileExt
-        ? currentFileFullName.replace(`.${currentFileExt}`, '')
-        : currentFileFullName;
-      const newItemName = `${currentFileName}_[ keep ]${currentFileExt ? `.${currentFileExt}` : ''}`;
-
-      await adoptRemoteFolderItem({
-        fs,
-        path: currentFileParentFolder,
-        remoteItemName: currentFileFullName,
-        opts: { newItemName },
-        stopErrorPropagate: true,
+    } catch (err) {
+      w3n.log('error', `Error resolving the conflict of '${currentResolvingPath.value}'. `, err);
+      notifications.$createNotice({
+        type: 'error',
+        withIcon: true,
+        content: t('dialog.resolve.error', { name: currentResolvingPath.value || '/' }),
       });
-
-      await appStorageSrv.startSyncUpload({ path: currentFileParentFolder });
-      const stats = await getFsStat({ fs, path: currentResolvingPath.value });
-
-      if (
-        stats &&
-        stats.versionSyncBranch === 'synced' &&
-        stats.size &&
-        stats.size <= AUTOMATIC_DOWNLOAD_FILE_LIMIT_SIZE &&
-        stats.version
-      ) {
-        await appStorageSrv.startSyncDownload({
-          path: currentResolvingPath.value,
-          version: stats.version,
-        });
-      }
-
-      await actionAfterResolveEnd();
-    } finally {
-      isProcessOngoing.value = false;
-    }
-  }
-
-  async function absorbRemoteFolderChanges() {
-    if (!syncStatus.value?.remote?.latest) {
-      return;
-    }
-
-    try {
-      isProcessOngoing.value = true;
-
-      const fs = getFs(USER_FS);
-      await _absorbRemoteFolderChanges({
-        fs,
-        path: currentResolvingPath.value,
-        opts: { postfixForNameOverlaps: '_[ keep ]' },
-      });
-
-      await appStorageSrv.startSyncUpload({
-        path: currentResolvingPath.value,
-        opts: { uploadVersion: syncStatus.value!.remote!.latest + 1 },
-      });
-      await actionAfterResolveEnd();
     } finally {
       isProcessOngoing.value = false;
     }
   }
 
   onMounted(async () => {
-    await getCurrentEntityInfo();
+    const hasConflict = await showConflictFrom(0).catch(err => {
+      w3n.log('error', 'Error loading the conflict information. ', err);
+      return false;
+    });
+    if (!hasConflict) {
+      // nothing to resolve: the caller refreshes the status of the given path
+      emits('action', { event: 'cancel', data: formatPath(props.paths[0]) });
+    }
   });
 </script>
 
@@ -266,7 +289,7 @@
 
         <span>{{ t('dialog.resolve.title') }}</span>
         <span v-if="totalResolvingItems > 1">
-          &nbsp;({{ currentResolvingPathIndex }}/{{ totalResolvingItems }})
+          &nbsp;({{ currentResolvingPathIndex + 1 }}/{{ totalResolvingItems }})
         </span>
       </div>
     </template>
@@ -327,21 +350,21 @@
         <div :class="$style.btnsBlock">
           <ui3n-button
             type="secondary"
-            @click.stop.prevent="keepCloud"
+            @click.stop.prevent="resolve('keepCloud')"
           >
             {{ t('dialog.resolve.btn.keep_cloud') }}
           </ui3n-button>
 
           <ui3n-button
             type="secondary"
-            @click.stop.prevent="keepLocal"
+            @click.stop.prevent="resolve('keepLocal')"
           >
             {{ t('dialog.resolve.btn.keep_local') }}
           </ui3n-button>
 
           <ui3n-button
             v-if="statsLocal?.type === 'file'"
-            @click.stop.prevent="keepBothFile"
+            @click.stop.prevent="resolve('keepBoth')"
           >
             {{ t('dialog.resolve.btn.keep_both') }}
           </ui3n-button>
@@ -356,7 +379,7 @@
               position-strategy="fixed"
               placement="top-end"
             >
-              <ui3n-button @click.stop.prevent="absorbRemoteFolderChanges">
+              <ui3n-button @click.stop.prevent="resolve('absorb')">
                 {{ t('dialog.resolve.btn.absorb') }}
               </ui3n-button>
             </ui3n-tooltip>

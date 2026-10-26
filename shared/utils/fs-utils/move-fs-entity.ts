@@ -26,7 +26,7 @@ export async function moveFsEntity({
   stopErrorPropagate?: boolean;
 }): Promise<void> {
   try {
-    return fs.move(src, dst);
+    return await fs.move(src, dst);
   } catch (err) {
     console.log(
       `🔥 [moveFsEntity] Error moving the FS object '${src}' . 'stopErrorPropagate' flag is ${stopErrorPropagate} .`,

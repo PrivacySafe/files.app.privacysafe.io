@@ -1,4 +1,5 @@
 import type { RootFsFolderView } from '@shared/types';
+import type { DialogMode } from '@picker/common/types';
 import { USER_FS, USER_DEVICE_FS, USER_TRASH_FOLDER, USER_TRASH_LOCAL_FOLDER } from '@shared/constants';
 
 export type PickerCategoryKey = 'home' | 'device' | 'system-synced' | 'system-local' | 'device-system';
@@ -25,6 +26,21 @@ const CATEGORY_LABEL_KEYS: Record<PickerCategoryKey, string> = {
 // Trash shares fsId with Home / Home(local)...fsId equality alone can't
 // tell them apart, must exclude by id explicitly.
 const EXCLUDED_IDS = new Set<string>([USER_TRASH_FOLDER, USER_TRASH_LOCAL_FOLDER]);
+
+/**
+ * System storages hold the code and data of all apps ("Apps Code", "Apps Data")
+ * and, on a desktop, the whole system disk. The picker serves other apps, so
+ * these roots are offered for reading only: in openFile, which returns
+ * read-only files. openFolder and the save modes return writable objects
+ * (see shell-dialogs.d.ts), so system roots are not offered there at all.
+ */
+export function isSystemRoot(root: Pick<RootFsFolderView, 'fsId'>): boolean {
+  return root.fsId.startsWith('system-');
+}
+
+export function isRootAvailableInMode(root: Pick<RootFsFolderView, 'fsId'>, mode: DialogMode | null | undefined): boolean {
+  return mode === 'openFile' || !isSystemRoot(root);
+}
 
 /**
  * Groups the platform's flat fsFolderList into the 5 fixed picker

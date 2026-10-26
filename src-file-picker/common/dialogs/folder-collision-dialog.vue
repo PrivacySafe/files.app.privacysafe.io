@@ -50,6 +50,7 @@
     color: var(--color-text-control-primary-default);
     overflow-wrap: anywhere;
   }
+
   .actionRow {
     display: flex;
     justify-content: flex-end;

@@ -16,4 +16,7 @@ export interface DialogRequestState {
   filters?: web3n.shell.files.FileTypeFilter[];
   defaultPath?: string;
   resolve: ((result: DialogResult) => void) | null;
+  reject: ((error: unknown) => void) | null;
+  /** set when the picker failed to start; a request arriving later is rejected with it */
+  startupError?: unknown;
 }

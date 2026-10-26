@@ -51,8 +51,6 @@ export function useFileHashing(
   const calculating512 = ref(false);
   const sha512progress = ref(0);
 
-  const isHashingProcStopped = ref(false);
-
   const file = shallowRef<Nullable<WritableFile | undefined>>(null);
   const fileSize = computed(() => fileStats.value?.size ?? 0);
   const fileMTime = computed(() => fileStats.value?.mtime?.valueOf() ?? 0);
@@ -102,12 +100,16 @@ export function useFileHashing(
     }
   }
 
+  /**
+   * Feeds the whole content to the hasher. Returns false when stopped before
+   * the end: a digest of partial content must never be shown or cached.
+   */
   async function readAndHashProcess(
     content: FileByteSource,
     hasher: { update: (chunk: Uint8Array) => void },
     reportProgress: (bytesDone: number) => void,
     shouldStop: () => boolean,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const totalSize = await content.getSize();
     let bytesRead = 0;
     let bytesHashed = 0;
@@ -125,8 +127,7 @@ export function useFileHashing(
 
     while (bytesRead < totalSize) {
       if (shouldStop()) {
-        console.info('Hashing canceled by stop signal');
-        break;
+        return false;
       }
 
       // start reading, but don't wait here
@@ -143,76 +144,129 @@ export function useFileHashing(
       }
     }
 
+    if (shouldStop()) {
+      return false;
+    }
+
     // hash the last chunk
     hashChunkAndReport();
+    return true;
   }
 
-  async function loadFile() {
+  /**
+   * Every hashing run gets an id; stopHashingProcess() and a new run make the
+   * previous id stale. A stale run neither updates the UI nor writes the cache.
+   */
+  let currentRunId = 0;
+
+  async function loadFile(): Promise<Nullable<WritableFile | undefined>> {
     if (!file.value) {
-      const fs = getFs(fsId.value);
-      file.value = await fs.writableFile(path.value);
+      const requestedFsId = fsId.value;
+      const requestedPath = path.value;
+      const fs = getFs(requestedFsId);
+      const loadedFile = await fs.writableFile(requestedPath);
+      // the panel may have switched to another entity while the file was opening
+      if (requestedFsId === fsId.value && requestedPath === path.value) {
+        file.value = loadedFile;
+      }
+    }
+    return file.value;
+  }
+
+  async function runHash({
+    alg,
+    createHasher,
+    hex,
+    calculating,
+    progress,
+    targetFile,
+    contentMTime,
+    contentLen,
+    isCurrentRun,
+  }: {
+    alg: string;
+    createHasher: typeof createSHA256;
+    hex: Ref<Nullable<string>>;
+    calculating: Ref<boolean>;
+    progress: Ref<number>;
+    targetFile: WritableFile;
+    contentMTime: number;
+    contentLen: number;
+    isCurrentRun: () => boolean;
+  }): Promise<boolean> {
+    try {
+      calculating.value = true;
+      const hasher = await createHasher();
+      hasher.init();
+
+      const content = await targetFile.getByteSource();
+      const completed = await readAndHashProcess(
+        content,
+        hasher,
+        bytesDone => {
+          if (isCurrentRun()) {
+            progress.value = contentLen ? Math.floor((bytesDone / contentLen) * 100) : 100;
+          }
+        },
+        () => !isCurrentRun(),
+      );
+
+      if (!completed || !isCurrentRun()) {
+        return false;
+      }
+
+      const hashInHex = hasher.digest('hex');
+      hex.value = hashInHex;
+      // cache into the file that was hashed, with its own mtime and size
+      await cacheHashInXAttrOf(targetFile, contentMTime, contentLen, alg, hashInHex);
+      return true;
+    } finally {
+      if (isCurrentRun()) {
+        calculating.value = false;
+      }
     }
   }
 
   async function calculateHash() {
-    await loadFile();
-    isHashingProcStopped.value = false;
-    await runSha256();
-    await runSha512();
-  }
+    const runId = ++currentRunId;
+    const isCurrentRun = () => runId === currentRunId;
 
-  async function runSha256() {
-    try {
-      calculating256.value = true;
-      const sha256 = await createSHA256();
-      sha256.init();
-
-      const content = await file.value!.getByteSource();
-
-      await readAndHashProcess(
-        content!,
-        sha256,
-        bytesDone => {
-          sha256progress.value = Math.floor((bytesDone / fileSize.value) * 100);
-        },
-        () => isHashingProcStopped.value,
-      );
-
-      const hashInHex = sha256.digest('hex');
-      sha256hex.value = hashInHex;
-      await cacheHashInXAttrOf(file.value!, fileMTime.value!, fileSize.value!, SHA256_ALG, hashInHex);
-    } finally {
-      calculating256.value = false;
+    const targetFile = await loadFile();
+    if (!targetFile || !isCurrentRun()) {
+      return;
     }
-  }
 
-  async function runSha512() {
-    try {
-      calculating512.value = true;
-      const sha512 = await createSHA512();
-      sha512.init();
+    const common = {
+      targetFile,
+      contentMTime: fileMTime.value,
+      contentLen: fileSize.value,
+      isCurrentRun,
+    };
 
-      const content = await file.value!.getByteSource();
-
-      await readAndHashProcess(
-        content!,
-        sha512,
-        bytesDone => {
-          sha512progress.value = Math.floor((bytesDone / fileSize.value) * 100);
-        },
-        () => isHashingProcStopped.value,
-      );
-
-      const hashInHex = sha512.digest('hex');
-      sha512hex.value = hashInHex;
-      await cacheHashInXAttrOf(file.value!, fileMTime.value!, fileSize.value!, SHA512_ALG, hashInHex);
-    } finally {
-      calculating512.value = false;
+    const sha256done = await runHash({
+      alg: SHA256_ALG,
+      createHasher: createSHA256,
+      hex: sha256hex,
+      calculating: calculating256,
+      progress: sha256progress,
+      ...common,
+    });
+    if (!sha256done) {
+      return;
     }
+
+    await runHash({
+      alg: SHA512_ALG,
+      createHasher: createSHA512,
+      hex: sha512hex,
+      calculating: calculating512,
+      progress: sha512progress,
+      ...common,
+    });
   }
 
   function stopHashingProcess() {
-    isHashingProcStopped.value = true;
+    currentRunId += 1;
     sha256hex.value = null;
     sha512hex.value = null;
     calculating256.value = false;
@@ -222,10 +276,10 @@ export function useFileHashing(
     file.value = null;
   }
 
-  async function loadCachedHashes() {
+  async function loadCachedHashes(targetFile: WritableFile, isCurrentRun: () => boolean) {
     try {
-      const cached = await readCachedHashes(file.value!);
-      if (!cached) {
+      const cached = await readCachedHashes(targetFile);
+      if (!cached || !isCurrentRun()) {
         return;
       }
       if (cached.hashes[SHA256_ALG]) {
@@ -241,8 +295,12 @@ export function useFileHashing(
   }
 
   async function loadHashing() {
-    await loadFile();
-    await loadCachedHashes();
+    const runId = currentRunId;
+    const targetFile = await loadFile();
+    if (!targetFile || runId !== currentRunId) {
+      return;
+    }
+    await loadCachedHashes(targetFile, () => runId === currentRunId);
   }
 
   return {

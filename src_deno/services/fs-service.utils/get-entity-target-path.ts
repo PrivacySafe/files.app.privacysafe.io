@@ -15,20 +15,28 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 /// <reference path="../../../@types/platform-defs/injected-w3n.d.ts" />
-import { getFileExtension } from '../../../shared/utils/various.ts';
-import { isThereEntityWithSameName } from './is-there-entity-with-same-name.ts';
-import { formatPath } from '../../../shared/utils/various.ts';
-import { readLink } from '../../../shared/utils/fs-utils/index.ts';
+import {
+  getFolderEntityNames,
+  joinEntityPath,
+  pickFreeEntityName,
+  readLink,
+} from '../../../shared/utils/fs-utils/index.ts';
 import type { ListingEntryExtended } from '../../../shared/types/index.ts';
 
+/**
+ * Returns the path for the entity in the target folder. When the name is taken
+ * there, a free one is picked: `name_copy.ext`, `name_copy_2.ext`, ...
+ */
 export async function getEntityTargetPath({
   fs,
+  srcFs = fs,
   entity,
   targetFolder,
   targetEntityName,
   namePostfix = 'copy',
 }: {
   fs: web3n.files.WritableFS;
+  srcFs?: web3n.files.WritableFS;
   entity: ListingEntryExtended;
   targetFolder: string;
   targetEntityName?: string;
@@ -36,28 +44,17 @@ export async function getEntityTargetPath({
 }): Promise<string> {
   const { type, name, fullPath } = entity;
 
-  const possibleEntityNewPath = formatPath(`${targetFolder}/${targetEntityName || name}`);
-  const isEntityPresentInTargetFolder = await isThereEntityWithSameName({
-    fs,
-    path: possibleEntityNewPath,
-    type,
+  const isFolder =
+    type === 'folder' ||
+    (type === 'link' && !!(await readLink({ fs: srcFs, path: fullPath, stopErrorPropagate: true }))?.isFolder);
+
+  const takenNames = await getFolderEntityNames(fs, targetFolder);
+  const freeName = await pickFreeEntityName({
+    name: targetEntityName || name,
+    isFolder,
+    postfix: namePostfix,
+    isTaken: candidate => takenNames.has(candidate),
   });
-  console.log(`🎈 IS '${fullPath}' ENTITY PRESENT IN TARGET FOLDER '${targetFolder}' => ${isEntityPresentInTargetFolder}`);
 
-  if (type === 'folder') {
-    return isEntityPresentInTargetFolder ? `${possibleEntityNewPath}_${namePostfix}` : possibleEntityNewPath;
-  }
-
-  if (type === 'link') {
-    const link = await readLink({ fs, path: fullPath });
-    if (link?.isFolder) {
-      return isEntityPresentInTargetFolder ? `${possibleEntityNewPath}_${namePostfix}` : possibleEntityNewPath;
-    }
-  }
-
-  const fileExt = getFileExtension(name);
-  const fileName = (targetEntityName || name).replace(`.${fileExt}`, '');
-  return isEntityPresentInTargetFolder
-    ? formatPath(`${targetFolder}/${fileName}_${namePostfix}.${fileExt}`)
-    : possibleEntityNewPath;
+  return joinEntityPath(targetFolder, freeName);
 }

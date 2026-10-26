@@ -35,3 +35,4 @@ export * from './delete-link.ts';
 export * from './make-folder.ts';
 export * from './get-entity-name-and-parent.ts';
 export * from './prepare-restored-path.ts';
+export * from './entity-name.ts';

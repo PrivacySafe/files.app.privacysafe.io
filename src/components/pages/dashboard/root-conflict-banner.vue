@@ -23,7 +23,9 @@
   import type { AppGlobalEvents } from '@shared/types';
 
   const props = defineProps<{
-    folderType: 'root' | 'trash';
+    folderType: 'root' | 'trash' | 'folder';
+    // the full path of the folder, for the 'folder' type only
+    path?: string;
   }>();
 
   const { t } = useI18n();
@@ -32,7 +34,27 @@
 
   const fsStore = useFsStore();
 
-  const folder = computed(() => props.folderType === 'root' ? '' : fsStore.trashFolderName!);
+  const folder = computed(() => {
+    switch (props.folderType) {
+      case 'root':
+        return '';
+      case 'trash':
+        return fsStore.trashFolderName!;
+      default:
+        return props.path ?? '';
+    }
+  });
+
+  const text = computed(() => {
+    switch (props.folderType) {
+      case 'root':
+        return t('folder_banner.text.resolve_root');
+      case 'trash':
+        return t('folder_banner.text.resolve_trash');
+      default:
+        return t('folder_banner.text.resolve_folder', { name: folder.value.split('/').pop() });
+    }
+  });
 
   async function openResolveDialog() {
     const component = defineAsyncComponent(() => import('@/components/dialogs/resolve-conflicts-dialog/resolve-conflicts-dialog.vue'));
@@ -62,7 +84,7 @@
     />
 
     <span :class="$style.text">
-      {{ folderType === 'root' ? t('folder_banner.text.resolve_root') : t('folder_banner.text.resolve_trash') }}
+      {{ text }}
     </span>
 
     <ui3n-button
@@ -70,7 +92,7 @@
       size="small"
       @click.stop.prevent="openResolveDialog"
     >
-      {{ t('app.resolve.text') }}
+      {{ t('app.resolve') }}
     </ui3n-button>
   </div>
 </template>

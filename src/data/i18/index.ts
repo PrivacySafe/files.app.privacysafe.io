@@ -29,8 +29,9 @@ const i18nInstance = createI18n({
   legacy: false,
   locale: 'en',
   fallbackLocale: 'en',
-  fallbackWarn: false,
-  missingWarn: false,
+  // a missing key shows the raw key to the user; warn about it during development
+  fallbackWarn: import.meta.env.DEV,
+  missingWarn: import.meta.env.DEV,
   messages,
 });
 

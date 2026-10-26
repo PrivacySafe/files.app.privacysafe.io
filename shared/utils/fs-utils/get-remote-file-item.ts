@@ -28,7 +28,7 @@ export async function getRemoteFileItem({
   stopErrorPropagate?: boolean;
 }): Promise<web3n.files.ReadonlyFile | undefined> {
   try {
-    return fs.v?.sync?.getRemoteFileItem(path, remoteItemName, remoteVersion);
+    return await fs.v?.sync?.getRemoteFileItem(path, remoteItemName, remoteVersion);
   } catch (err) {
     console.log(
       `🔥 [getRemoteFileItem] Error in the process for the file '${path}/${remoteItemName}' . 'stopErrorPropagate' flag is ${stopErrorPropagate} .`,

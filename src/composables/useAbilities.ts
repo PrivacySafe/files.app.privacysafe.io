@@ -53,10 +53,8 @@ export function useAbilities() {
       return false;
     }
 
-    return (
-      [USER_FS, USER_LOCAL_FS, USER_DEVICE_FS].includes(currentFsId) &&
-      currentRootFolderId.includes(END_OF_ROOT_FOLDER_ID)
-    );
+    // the storage service keeps favorites for the user synced and local storages only
+    return [USER_FS, USER_LOCAL_FS].includes(currentFsId) && currentRootFolderId.includes(END_OF_ROOT_FOLDER_ID);
   }
 
   function canDownload(selectedEntities: ListingEntryExtended[]): boolean {

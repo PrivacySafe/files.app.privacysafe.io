@@ -24,6 +24,7 @@
   import { getFileExtension, formatFileSize } from '@v1nt1248/3nclient-lib/utils';
   import { useDblClickHandler } from '@/composables/useDblClickHandler';
   import { useAbilities } from '@/composables/useAbilities';
+  import { useEntityNameEditing } from '@/composables/useEntityNameEditing';
   import { useAppStore, useFsStore, useSyncQueueStore } from '@/store';
   import type { FsEntityInfoProvideProps, ListingEntryExtended } from '@shared/types';
   import type { FsTableRowProps, FsTableRowEmits } from './types';
@@ -125,8 +126,10 @@
     return { width: style.width, minWidth: style.width };
   }
 
+  const { editableEl, validateName, onInvalidName, revertName } = useEntityNameEditing();
+
   function updateName(name: Nullable<string>): void {
-    emits('action', { event: 'rename', payload: { row: props.row, newName: name } });
+    emits('action', { event: 'rename', payload: { row: props.row, newName: name, revert: revertName } });
   }
 
   function updateFavorite() {
@@ -194,11 +197,14 @@
       </div>
 
       <ui3n-editable
+        ref="editableEl"
         :model-value="row.name"
         disallow-empty-value
+        :validator="validateName"
         :disabled="!canRename(fsId, rootFolderId) || disabled || readonly || !!row.brokeReason"
         @toggle:edit-mode="editNameMode = $event"
         @update:model-value="updateName"
+        @invalid="onInvalidName"
       />
 
       <ui3n-icon

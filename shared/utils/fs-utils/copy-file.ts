@@ -28,7 +28,7 @@ export async function copyFile({
   stopErrorPropagate?: boolean;
 }): Promise<void> {
   try {
-    return fs.copyFile(src, dst, overwrite);
+    return await fs.copyFile(src, dst, overwrite);
   } catch (err) {
     console.log(
       `🔥 [copyFile] Error copying the file '${src}' . 'stopErrorPropagate' flag is ${stopErrorPropagate} .`,

@@ -13,6 +13,8 @@
 
   const props = defineProps<{
     dialogProps?: Ui3nDialogComponentProps<boolean>;
+    /** Windows naming rules; true unless the caller says otherwise */
+    strictNames?: boolean;
     data: string;
   }>();
 
@@ -22,13 +24,14 @@
 
   const newName = ref(props.data);
 
-  const hasChanged = computed(() => {
+  // the same name may be confirmed too: it is how the default name is accepted
+  const canConfirm = computed(() => {
     const trimmed = newName.value.trim();
-    return trimmed.length > 0 && trimmed !== props.data && isValidFileName(trimmed);
+    return trimmed.length > 0 && isValidFileName(trimmed, { strict: props.strictNames !== false });
   });
 
   function handleConfirm() {
-    if (!hasChanged.value) {
+    if (!canConfirm.value) {
       return;
     }
     emits('action', { event: 'confirm', data: newName.value.trim() });
@@ -66,7 +69,7 @@
         </ui3n-button>
 
         <ui3n-button
-          :disabled="!hasChanged"
+          :disabled="!canConfirm"
           @click="handleConfirm"
         >
           {{ t('dialog.file_exist.button.change') }}

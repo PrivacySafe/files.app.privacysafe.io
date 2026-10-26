@@ -80,7 +80,7 @@
       return '';
     }
 
-    return t(`fs.entity.info.type.${entityStats.value!.type}`);
+    return t(`fs.entity.info.type_${entityStats.value!.type}`);
   });
 
   const entityPath = computed(() => {
@@ -124,44 +124,74 @@
     return entityStats.value!.tags;
   });
 
-  async function loadEntity(fullPath: string) {
+  /*
+   The panel follows the selected entity. Answers for a previous selection may
+   come after the current one; each load has an id, and only the latest one may
+   update the panel.
+  */
+  let currentLoadId = 0;
+
+  async function loadEntity(fsId: string, fullPath: string) {
+    const loadId = ++currentLoadId;
+    const isCurrentLoad = () => loadId === currentLoadId;
+
+    stopHashingProcess();
+    entityStats.value = null;
+    entitySyncStatus.value = {} as EntitySyncStatus;
+
     try {
       isLoading.value = true;
-      entityStats.value = (await getEntityStats({ fsId: props.fsId, fullPath })) || null;
+      const stats = (await getEntityStats({ fsId, fullPath })) || null;
+      if (!isCurrentLoad()) {
+        return;
+      }
+      entityStats.value = stats;
       if (canHash.value) {
         await loadHashing();
       }
+    } catch (err) {
+      w3n.log('error', `Error loading the information about '${fullPath}'. `, err);
     } finally {
-      isLoading.value = false;
+      if (isCurrentLoad()) {
+        isLoading.value = false;
+      }
+    }
+
+    if (!isCurrentLoad() || !entityStats.value) {
+      return;
+    }
+
+    if (fsId.includes('synced')) {
+      const sStatus = await getSyncedStatus({ fsId, fullPath }).catch(() => undefined);
+      if (isCurrentLoad()) {
+        entitySyncStatus.value = sStatus || ({} as EntitySyncStatus);
+      }
+    }
+
+    const { type, thumbnail, ext } = entityStats.value ?? {};
+    if (
+      type === 'file' &&
+      !thumbnail &&
+      (isFileImage({ fullName: fullPath.toLowerCase() }) ||
+        isFileVideo({ fullName: fullPath.toLowerCase() }) ||
+        ext === 'pdf')
+    ) {
+      createThumbnail(fsId, fullPath, entityStats.value.version ?? entityStats.value.mtime?.valueOf())
+        .then(val => {
+          // the thumbnail belongs to this entity only
+          if (val && isCurrentLoad() && entityStats.value) {
+            entityStats.value.thumbnail = val;
+          }
+        })
+        .catch(err => w3n.log('error', `Error creating a thumbnail for '${fullPath}'. `, err));
     }
   }
 
   watch(
-    () => props.path,
-    async (val, oVal) => {
-      if (val && val !== oVal) {
-        stopHashingProcess();
-        await loadEntity(val);
-
-        if (props.fsId.includes('synced')) {
-          const sStatus = await getSyncedStatus({ fsId: props.fsId, fullPath: val });
-          entitySyncStatus.value = sStatus || ({} as EntitySyncStatus);
-        }
-
-        const { type, thumbnail, ext } = entityStats.value!;
-        if (
-          type === 'file' &&
-          !thumbnail &&
-          (isFileImage({ fullName: props.path.toLowerCase() }) ||
-            isFileVideo({ fullName: props.path.toLowerCase() }) ||
-            ext === 'pdf')
-        ) {
-          createThumbnail(props.fsId, props.path).then(val => {
-            if (val) {
-              entityStats.value!.thumbnail = val;
-            }
-          });
-        }
+    [() => props.fsId, () => props.path],
+    ([fsId, path], [oFsId, oPath]) => {
+      if (path && (path !== oPath || fsId !== oFsId)) {
+        loadEntity(fsId, path);
       }
     },
     { immediate: true },
@@ -269,19 +299,19 @@
         <span>{{ t('fs.entity.info.status') }}</span>
         <section>
           <p>
-            state: <i>{{ entitySyncStatus?.state }}</i>
+            {{ t('fs.entity.info.sync_state') }}: <i>{{ entitySyncStatus?.state && t(`fs.sync_state.${entitySyncStatus.state}`) }}</i>
           </p>
 
           <p v-if="entitySyncStatus?.local">
-            local ver: <i>{{ entitySyncStatus?.local.latest }}</i>
+            {{ t('fs.entity.info.local_version') }}: <i>{{ entitySyncStatus?.local.latest }}</i>
           </p>
 
           <p v-if="entitySyncStatus?.synced">
-            synced ver: <i>{{ entitySyncStatus?.synced.latest }}</i>
+            {{ t('fs.entity.info.synced_version') }}: <i>{{ entitySyncStatus?.synced.latest }}</i>
           </p>
 
           <p v-if="entitySyncStatus?.remote">
-            remote ver: <i>{{ entitySyncStatus?.remote.latest }}</i>
+            {{ t('fs.entity.info.remote_version') }}: <i>{{ entitySyncStatus?.remote.latest }}</i>
           </p>
         </section>
       </div>

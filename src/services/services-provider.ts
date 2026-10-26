@@ -17,9 +17,11 @@
 import { makeServiceCaller } from '@shared/utils/ipc/ipc-service-caller';
 import type { StorageAppDenoService } from '@deno/types';
 
-function showMessage() {
+const CLOSE_DELAY_SECONDS = 10;
+
+/** Shows the startup error in place of the app and closes the window. */
+export function showStartupError() {
   const mainContainer = document.getElementById('main');
-  console.log('[MAIN] => ', mainContainer);
   if (!mainContainer) {
     w3n?.closeSelf();
     return;
@@ -46,14 +48,14 @@ function showMessage() {
     >
       <span>Oops...</span>
       <span>Something went wrong 🙁.</span>
-      <span>The app will close in 10 seconds.</span>
+      <span>The app will close in ${CLOSE_DELAY_SECONDS} seconds.</span>
       <span>Please try again later.</span>
     </div>
   `;
 
   setTimeout(() => {
     w3n?.closeSelf();
-  }, 15000);
+  }, CLOSE_DELAY_SECONDS * 1000);
 }
 
 export let appStorageSrv: StorageAppDenoService;
@@ -111,9 +113,9 @@ export async function initializationServices() {
       'restoreEntities',
     ]) as StorageAppDenoService;
 
-    console.info('<- SERVICES ARE INITIALIZED ->');
   } catch (e) {
-    console.error('# ERROR WHILE SERVICES INITIALISE # ', e);
-    showMessage();
+    await w3n.log('error', 'Error connecting to the storage service. ', e);
+    // the caller must not mount the app: every store call would fail without the service
+    throw e;
   }
 }

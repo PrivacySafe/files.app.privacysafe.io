@@ -23,21 +23,37 @@ export async function appConfigService(): Promise<AppConfigService> {
 
   let trashFolderName = '';
 
+  async function getDefaultTrashFolderName(): Promise<string> {
+    const user = await w3n.mailerid?.getUserId().catch(err => {
+      w3n.log('error', 'Error getting the user id for the trash folder name. ', err);
+      return undefined;
+    });
+    return `${TRASH_FOLDER_NAME_PREFIX}-${user || ''}`;
+  }
+
+  /**
+   * The trash folder name must never be empty: with an empty name "delete"
+   * would move entities to the root folder instead of the trash.
+   */
   async function initialize() {
     try {
       const isPresentConfigFile = await appLocalFs.checkFilePresence(CONFIG_FILE);
-      if (!isPresentConfigFile) {
-        const user = await w3n.mailerid?.getUserId();
-        trashFolderName = `${TRASH_FOLDER_NAME_PREFIX}-${user || ''}`;
-        await appLocalFs.writeJSONFile(CONFIG_FILE, {
-          trashFolderName,
-        });
-      } else {
-        const configFileData = await loadConfigFile();
-        trashFolderName = configFileData?.trashFolderName || '';
+      const configFileData = isPresentConfigFile ? await loadConfigFile() : undefined;
+      if (configFileData?.trashFolderName) {
+        trashFolderName = configFileData.trashFolderName;
+        return;
+      }
+
+      trashFolderName = await getDefaultTrashFolderName();
+      // a config that could not be read is not overwritten, to keep its other settings
+      if (!isPresentConfigFile || configFileData) {
+        await appLocalFs.writeJSONFile(CONFIG_FILE, { ...configFileData, trashFolderName });
       }
     } catch (err) {
       w3n.log('error', 'Error making the config file. ', err);
+      if (!trashFolderName) {
+        trashFolderName = await getDefaultTrashFolderName();
+      }
     }
   }
 
@@ -58,12 +74,7 @@ export async function appConfigService(): Promise<AppConfigService> {
   }
 
   async function getTrashFolderName(): Promise<string> {
-    if (trashFolderName) {
-      return trashFolderName;
-    }
-
-    const config = await loadConfigFile();
-    return config!.trashFolderName;
+    return trashFolderName;
   }
 
   await initialize();

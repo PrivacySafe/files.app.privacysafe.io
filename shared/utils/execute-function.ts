@@ -31,8 +31,11 @@ interface BaseProps<F extends (...args: any[]) => any, V> {
   retryCount?: number;
   retryDelay?: number;
   errorText?: string;
+  /** Receives the error thrown by `fn` itself (or the timeout error) of the last attempt. */
   actionIfError?: (err?: unknown) => void;
-  actionIfSuccess?: () => void;
+  /** Runs once after a successful attempt; it is awaited and is never a reason to retry `fn`. */
+  actionIfSuccess?: () => void | Promise<void>;
+  /** Runs once at the very end, both after success and after the last failed attempt. */
   actionInFinally?: () => void;
 }
 
@@ -57,11 +60,19 @@ type ExecuteFunctionProps<F extends (...args: any[]) => any, V = Awaited<ReturnT
   | ExecuteFunctionPropsNoCatchError<F, V>;
 
 class ExecuteFunctionError extends Error {
-  public cause: unknown;
+  public override cause: unknown;
   constructor(message: string, data?: { cause?: unknown; fnArgs?: unknown[] }) {
     super(message);
     this.cause = data?.cause;
     this.name = 'ExecuteFunctionError';
+  }
+}
+
+function runHandlerSafely(name: string, handler: (() => void) | undefined): void {
+  try {
+    handler?.();
+  } catch (err) {
+    console.error(`[executeFunc] The ${name} handler has thrown an error.`, err);
   }
 }
 
@@ -90,6 +101,7 @@ export async function executeFunc<F extends (...args: any[]) => any, V = Awaited
   for (let attempt = 1; attempt <= totalAttempts; attempt++) {
     const controller = new AbortController();
     let tOut: ReturnType<typeof setTimeout> | null = null;
+    let result: Awaited<ReturnType<F>>;
 
     try {
       const executionPromise = (async () => {
@@ -110,18 +122,8 @@ export async function executeFunc<F extends (...args: any[]) => any, V = Awaited
         }
       });
 
-      const result = await Promise.race([executionPromise, timeoutPromise]);
-
-      if (tOut) {
-        clearTimeout(tOut);
-      }
-      actionIfSuccess?.();
-      actionInFinally?.();
-      return result;
+      result = await Promise.race([executionPromise, timeoutPromise]);
     } catch (err) {
-      if (tOut) {
-        clearTimeout(tOut);
-      }
       lastError = err;
 
       if (attempt < totalAttempts) {
@@ -130,7 +132,20 @@ export async function executeFunc<F extends (...args: any[]) => any, V = Awaited
           await sleep(retryDelay);
         }
       }
+      continue;
+    } finally {
+      if (tOut) {
+        clearTimeout(tOut);
+      }
     }
+
+    // success: handlers run outside of the retry loop, so their errors never re-run `fn`
+    try {
+      await actionIfSuccess?.();
+    } finally {
+      runHandlerSafely('actionInFinally', actionInFinally);
+    }
+    return result as V;
   }
 
   const isTimeout = lastError instanceof ExecuteFunctionError && lastError.cause === 'timeout';
@@ -144,8 +159,8 @@ export async function executeFunc<F extends (...args: any[]) => any, V = Awaited
       });
 
   console.error(`[executeFunc] All ${totalAttempts} attempts failed.`, finalError);
-  actionIfError?.(finalError);
-  actionInFinally?.();
+  runHandlerSafely('actionIfError', () => actionIfError?.(lastError));
+  runHandlerSafely('actionInFinally', actionInFinally);
 
   if (!doesErrorPropagateStop) {
     throw finalError;

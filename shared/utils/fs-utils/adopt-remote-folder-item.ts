@@ -28,7 +28,7 @@ export async function adoptRemoteFolderItem({
   stopErrorPropagate?: boolean;
 }): Promise<number | undefined> {
   try {
-    return fs.v?.sync?.adoptRemoteFolderItem(path, remoteItemName, opts);
+    return await fs.v?.sync?.adoptRemoteFolderItem(path, remoteItemName, opts);
   } catch (err) {
     console.log(
       `🔥 [adoptRemoteFolderItem] Error in the process for the FS object '${path}'. 'stopErrorPropagate' flag is ${stopErrorPropagate} .`,

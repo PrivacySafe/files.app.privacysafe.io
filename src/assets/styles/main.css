@@ -65,8 +65,13 @@
 
 html {
   --column-size: 95px;
-  
+
   overflow: hidden;
+}
+
+/* tooltips, the drag ghost and other elements are moved to body, outside #main */
+body {
+  font-family: Inter, system-ui, sans-serif;
 }
 
 section,

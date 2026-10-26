@@ -23,6 +23,7 @@
     type Ui3nDialogComponentProps,
     type Ui3nDialogEvent,
   } from '@v1nt1248/3nclient-lib';
+  import { isValidEntityName } from '@shared/utils/fs-utils/entity-name';
 
   const props = defineProps<{
     name: string;
@@ -44,6 +45,10 @@
 
   function checkRequired(text?: unknown): boolean | string {
     return !!text || t('validation.text.required');
+  }
+
+  function checkName(text?: unknown): boolean | string {
+    return !text || isValidEntityName(text) || t('validation.text.invalid_name');
   }
 
   function checkEquality(text?: unknown): boolean | string {
@@ -86,7 +91,7 @@
           ref="inp"
           v-model="data.newName"
           :autofocus="true"
-          :rules="[checkRequired, checkEquality]"
+          :rules="[checkRequired, checkName, checkEquality]"
           :placeholder="t('dialog.rename_folder.field.placeholder.input')"
           :class="$style.input"
           @init="inpElement = $event"

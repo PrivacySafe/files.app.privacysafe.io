@@ -24,7 +24,7 @@ export async function getReadonlySubRoot({
   stopErrorPropagate?: boolean;
 }): Promise<web3n.files.ReadonlyFS | undefined> {
   try {
-    return fs.readonlySubRoot(folder);
+    return await fs.readonlySubRoot(folder);
   } catch (err) {
     console.log(
       `🔥 [getReadonlySubRoot] Error getting of the readonly sub root '${folder}' . 'stopErrorPropagate' flag is ${stopErrorPropagate} .`,

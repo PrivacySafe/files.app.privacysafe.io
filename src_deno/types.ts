@@ -126,6 +126,8 @@ export interface FsService {
     basePath?: string;
     operatingSystem: 'macos' | 'linux' | 'windows';
     version?: number;
+    /** false skips the extended attributes; the file picker needs none of them */
+    withXAttrs?: boolean;
   }) => Promise<ListingEntryExtended[]>;
 
   copyEntities: (payload: {
@@ -163,7 +165,7 @@ export interface FsService {
     fsId: string;
     entities: Pick<ListingEntryExtended, 'fullPath' | 'type' | 'name'>[];
     completely?: boolean;
-  }) => Promise<Record<string, string> | boolean | undefined>;
+  }) => Promise<Record<string, string> | true>;
 
   restoreEntities: (payload: {
     fsId: string;
@@ -181,3 +183,8 @@ export interface StorageAppDenoService
     Omit<FsStore, 'fsList' | 'fsRootFolderList'> {
   watchEvent(obs: web3n.Observer<StorageEvent>): () => void;
 }
+
+/** Methods of the 'AppStoragePicker' RPC service, available to the file pickers. */
+export const PICKER_SERVICE_METHODS = ['getFsList', 'getFsRootFolderList', 'getFolderContentFilledList'] as const;
+
+export type PickerServiceMethod = (typeof PICKER_SERVICE_METHODS)[number];

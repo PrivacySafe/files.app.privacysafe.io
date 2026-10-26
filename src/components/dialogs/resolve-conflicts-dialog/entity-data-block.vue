@@ -81,7 +81,8 @@
             </div>
 
             <div :class="$style.size">
-              {{ stats?.size ? formatFileSize(stats.size) : '' }}
+              <!-- a folder's stat size is not the size of its content -->
+              {{ stats?.type === 'file' && stats.size ? formatFileSize(stats.size) : '' }}
             </div>
           </div>
 

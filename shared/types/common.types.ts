@@ -89,6 +89,12 @@ export interface StorageEntityUpdate {
   payload: { fsId: string; path: string; nodeId?: string; changedValues?: string[] };
 }
 
+/** An entry of the synced FS folder `path` is renamed, locally or by an adopted remote change. */
+export interface StorageEntityRenameEvent {
+  event: 'entity:rename';
+  payload: { path: string; oldName: string; newName: string };
+}
+
 /* -------------------- */
 
 export interface StorageConnectionStatusEvent {
@@ -141,6 +147,7 @@ export type StorageEvent =
   | StorageAdoptEndEvent
   | StorageErrorEvent
   | StorageEntityUpdate
+  | StorageEntityRenameEvent
   | StorageFavoritesUpdateEvent
   | StorageConnectionStatusEvent
   | StorageSyncQueueItemAddEvent

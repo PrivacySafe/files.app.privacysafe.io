@@ -171,6 +171,7 @@
       white-space: nowrap;
     }
   }
+
   .iconSlot {
     display: inline-flex;
     cursor: pointer;
@@ -181,6 +182,7 @@
   .iconCheck {
     display: none !important;
   }
+
   .iconType {
     position: relative;
   }
@@ -188,6 +190,7 @@
   .row:hover .iconCheck {
     display: block !important;
   }
+
   .row:hover .iconType {
     display: none !important;
   }

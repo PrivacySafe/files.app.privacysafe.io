@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script lang="ts" setup>
-  import { computed, ref, watch } from 'vue';
+  import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import {
     Ui3nDialog,
@@ -27,13 +27,15 @@
     type Ui3nDialogComponentProps,
     type Ui3nDialogEvent,
   } from '@v1nt1248/3nclient-lib';
-  import { getRandomId, getFileExtension, formatFileSize } from '@v1nt1248/3nclient-lib/utils';
+  import { getFileExtension, formatFileSize } from '@v1nt1248/3nclient-lib/utils';
   import FileType from '@/components/common/file-type/file-type.vue';
 
   const vUi3nHtml = Ui3nHtml;
 
   const props = defineProps<{
     currentFolder: string;
+    /** Uploads the files and reports the written bytes of each one. */
+    upload: (files: File[], onProgress: (fileIndex: number, bytesWritten: number) => void) => Promise<unknown>;
     dialogProps?: Ui3nDialogComponentProps<File[]>;
   }>();
 
@@ -46,64 +48,40 @@
   const files = ref<Record<string, File>>({});
   const isUploading = ref(false);
   const totalSize = ref<number>(0);
+  // percent of each file written to the storage
   const progress = ref<Record<string, number>>({});
 
   const currentFolderName = computed(() =>
-    props.currentFolder ? props.currentFolder.replaceAll('/', ' / ') : 'Home',
+    props.currentFolder ? props.currentFolder.replaceAll('/', ' / ') : t('fs.folder_name.user_synced_home'),
   );
 
   const uploadedSize = computed(() =>
-    Object.keys(progress.value).reduce((acc, id) => {
-      const fileSize = files.value[id].size;
-      const fileProgress = progress.value[id];
-      const uploadedFileSize = (fileSize * fileProgress) / 100;
-      acc += uploadedFileSize;
-      return acc;
-    }, 0),
+    Object.keys(progress.value).reduce((acc, id) => acc + (files.value[id].size * progress.value[id]) / 100, 0),
   );
 
-  function updateProgress(ev: ProgressEvent, id: string): void {
-    if (ev.lengthComputable) {
-      progress.value[id] = parseFloat(((ev.loaded / ev.total) * 100).toFixed(1));
+  async function onFilesSelect(value: File[] | FileList) {
+    const selected = [...value];
+    if (selected.length === 0 || isUploading.value) {
+      return;
+    }
+
+    isUploading.value = true;
+    totalSize.value = selected.reduce((acc, f) => acc + f.size, 0);
+    selected.forEach((file, index) => {
+      files.value[`${index}`] = file;
+      progress.value[`${index}`] = 0;
+    });
+
+    try {
+      await props.upload(selected, (fileIndex, bytesWritten) => {
+        const { size } = selected[fileIndex];
+        progress.value[`${fileIndex}`] = size ? Math.min(100, Math.round((bytesWritten / size) * 1000) / 10) : 100;
+      });
+    } finally {
+      // failed files are reported by the uploader; the dialog closes in any case
+      emits('action', { event: 'confirm', data: selected });
     }
   }
-
-  function onFilesSelect(value: File[] | FileList) {
-    isUploading.value = true;
-    totalSize.value = [...value].reduce((acc, f) => {
-      acc += f.size;
-      return acc;
-    }, 0);
-
-    [...value].forEach((file: File) => {
-      const id = getRandomId(5);
-      if (!files.value[id]) {
-        files.value[id] = file;
-        const reader = new FileReader();
-
-        const controller = new AbortController();
-
-        reader.addEventListener('loadstart', event => updateProgress(event, id));
-        reader.addEventListener('load', event => updateProgress(event, id));
-        reader.addEventListener('loadend', () => {
-          progress.value[id] = 100;
-          controller.abort();
-        });
-        reader.addEventListener('progress', event => updateProgress(event, id));
-
-        reader.readAsDataURL(file);
-      }
-    });
-  }
-
-  watch(
-    () => uploadedSize.value,
-    () => {
-      if (isUploading.value && uploadedSize.value === totalSize.value) {
-        emits('action', { event: 'confirm', data: Object.values(files.value) });
-      }
-    },
-  );
 </script>
 
 <template>
@@ -167,7 +145,7 @@
           <template #additional-text>
             <div :class="$style.additional">
               <span :class="$style.text">
-                {{ t('dialog.upload_files.text1') }}: <b>{{ currentFolder ? `/${currentFolder}` : 'Home' }}</b>
+                {{ t('dialog.upload_files.text1') }}: <b>{{ currentFolder ? `/${currentFolder}` : t('fs.folder_name.user_synced_home') }}</b>
               </span>
 
               <div :class="$style.additionalInfo">

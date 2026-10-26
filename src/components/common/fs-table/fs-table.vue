@@ -34,6 +34,7 @@
   import { useAbilities } from '@/composables/useAbilities';
   import { useFsTable } from './useFsTable';
   import { useAppStore, useFsStore, useFavoriteStore } from '@/store';
+  import { isValidEntityName } from '@shared/utils/fs-utils/entity-name';
   import type { AppGlobalEvents, ListingEntryExtended, FsFolderEntityEvent } from '@shared/types';
   import type { FsTableProps, FsTableEmits, FsTableSlots } from './types';
   import type { FsTableRowProps } from '@/components/common/fs-table-row/types';
@@ -85,7 +86,8 @@
 
   const sortedFolderDataBody = computed(() => {
     const { field, direction } = currentWindowSortConfig.value;
-    return (folderData.value?.body?.content || []).sort((a, b) => sortFolderData(a, b, field, direction));
+    // sort a copy: sorting the reactive source inside a computed mutates the state it depends on
+    return [...(folderData.value?.body?.content || [])].sort((a, b) => sortFolderData(a, b, field, direction));
   }) as ComputedRef<ListingEntryExtended[]>;
 
   const { canDrop } = useAbilities();
@@ -138,12 +140,33 @@
       }
 
       case 'rename': {
+        // the name field shows the new name until it is told to revert
+        const { row, newName, revert } = payload as {
+          row: ListingEntryExtended;
+          newName: string;
+          revert?: () => void;
+        };
         if (isTrashFolderInCurrentWindow.value || isSystemFolderInCurrentWindow.value) {
+          revert?.();
           return;
         }
 
-        const { row, newName } = payload as { row: ListingEntryExtended; newName: string };
-        await renameEntity({ fsId: props.fsId, entity: row, newName });
+        if (!isValidEntityName(newName)) {
+          revert?.();
+          appStore.$createNotice({ type: 'error', withIcon: true, content: t('validation.text.invalid_name') });
+          return;
+        }
+        try {
+          await renameEntity({ fsId: props.fsId, entity: row, newName });
+        } catch (err) {
+          w3n.log('error', `Error renaming '${row.fullPath}'. `, err);
+          revert?.();
+          appStore.$createNotice({
+            type: 'error',
+            withIcon: true,
+            content: t('fs.rename_error', { name: row.name }),
+          });
+        }
         await loadFolderData();
         return;
       }
@@ -157,7 +180,12 @@
         const favFolderList = favoriteId
           ? await unsetFolderAsFavorite({ fsId: props.fsId, id: favoriteId, fullPath })
           : await setFolderAsFavorite({ fsId: props.fsId, fullPath });
-        setFavoriteFolderListValue(favFolderList || []);
+        // undefined means a failure: the current list must not be replaced by an empty one
+        if (favFolderList) {
+          setFavoriteFolderListValue(favFolderList);
+        } else {
+          appStore.$createNotice({ type: 'error', withIcon: true, content: t('fs.favorite_error') });
+        }
         await loadFolderData();
         return;
       }
@@ -167,8 +195,7 @@
           return;
         }
 
-        // @ts-ignore
-        if (size(tableComponent.value?.selectedRowsArray as ListingEntryExtended[]) > 1) {
+        if (size(selectedFsEntities.value) > 1) {
           return;
         }
 
@@ -197,7 +224,6 @@
         ? `${props.basePath.fullPath}/${props.path}`
         : props.basePath.fullPath || props.path;
 
-    console.log(`   REFRESH DATA '${currentFolderFullPath}' => `, ...arguments);
     if (path === currentFolderFullPath || withoutVerify) {
       await loadFolderData();
     }
@@ -218,8 +244,10 @@
   }
 
   async function loadFolderData() {
+    const requestedRootFolderId = props.rootFolderId;
+    const requestedPath = props.path;
+
     try {
-      console.log('<- START FOLDER DATA LOADING ->');
       emits('loading', true);
       isLoading.value = true;
       const { rootFolderId, path, data } = await getFolderContentFilledList({
@@ -238,10 +266,15 @@
       setCustomScrollBar();
       tableComponent.value && tableComponent.value!.closeGroupActionsRow();
     } catch (error) {
-      console.error(`The loading folder ${props.basePath.fullPath} error . `, error);
+      w3n.log('error', `Error loading the folder '${requestedPath}'. `, error);
+      // Do not leave the previous folder's rows on screen: row actions would target them.
+      if (requestedRootFolderId === props.rootFolderId && requestedPath === props.path) {
+        taskRunner.cancelTasks();
+        folderData.value = prepareFolderDataTable([], props.fsId, t, isSyncFolderInCurrentWindow.value);
+        appStore.$createNotice({ type: 'error', withIcon: true, content: t('fs.load_error') });
+      }
     } finally {
       emits('loading', false);
-      console.log('<- END FOLDER DATA LOADING ->');
       isLoading.value = false;
     }
   }
@@ -283,8 +316,7 @@
   );
 
   watch(
-    // @ts-ignore
-    () => size(tableComponent.value?.selectedRowsArray as ListingEntryExtended[]),
+    () => size(selectedFsEntities.value),
     (val, oVal) => {
       if (val !== oVal) {
         emits('open:info', null);

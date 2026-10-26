@@ -54,7 +54,7 @@ export function useNavigation() {
 
   const window1FolderPath = computed(() => route.query.path as string);
   const window1SortBy = computed(() => (route.query.sortBy || 'type') as keyof ListingEntryExtended);
-  const window1SortOrder = computed(() => (route.query.sortOrder || 'desc') as 'asc' | 'desc');
+  const window1SortOrder = computed(() => (route.query.sortOrder || 'asc') as 'asc' | 'desc');
 
   const window2RootFolderId = computed(() => {
     if (isSplittedMode.value) {
@@ -83,17 +83,21 @@ export function useNavigation() {
     return null;
   });
   const window2SortBy = computed(() => (route.query.sort2By || 'type') as keyof ListingEntryExtended);
-  const window2SortOrder = computed(() => (route.query.sort2Order || 'desc') as 'asc' | 'desc');
+  const window2SortOrder = computed(() => (route.query.sort2Order || 'asc') as 'asc' | 'desc');
 
+  // `replace` changes the current history entry instead of adding one, e.g. when the shown
+  // folder is renamed: "Back" must not lead to the old path.
   async function navigateToRouteSingle({
     params,
     query,
+    replace,
   }: {
     params?: Partial<RouteSingle['params']>;
     query?: Partial<RouteSingle['query']>;
+    replace?: boolean;
   }) {
     const { rootFolderId } = route.params as RouteSingle['params'];
-    const { view = 'table', path = '', sortBy = 'type', sortOrder = 'desc' } = route.query as RouteSingle['query'];
+    const { view = 'table', path = '', sortBy = 'type', sortOrder = 'asc' } = route.query as RouteSingle['query'];
 
     const newRouterData: RouteSingle = {
       name: APP_ROUTES.SINGLE,
@@ -109,15 +113,17 @@ export function useNavigation() {
       },
     };
 
-    return router.push(newRouterData);
+    return replace ? router.replace(newRouterData) : router.push(newRouterData);
   }
 
   async function navigateToRouteDouble({
     params,
     query,
+    replace,
   }: {
     params?: Partial<RouteDouble['params']>;
     query?: Partial<RouteDouble['query']>;
+    replace?: boolean;
   }) {
     const { rootFolderId, rootFolder2Id } = route.params as RouteDouble['params'];
     const {
@@ -127,8 +133,8 @@ export function useNavigation() {
       path2 = '',
       sortBy = 'type',
       sort2By = 'type',
-      sortOrder = 'desc',
-      sort2Order = 'desc',
+      sortOrder = 'asc',
+      sort2Order = 'asc',
     } = route.query as RouteDouble['query'];
 
     const newRouterData: RouteDouble = {
@@ -149,7 +155,7 @@ export function useNavigation() {
       },
     };
 
-    return router.push(newRouterData);
+    return replace ? router.replace(newRouterData) : router.push(newRouterData);
   }
 
   async function selectActiveWindow(val: 1 | '1' | 2 | '2') {

@@ -2,13 +2,20 @@ import { reactive, computed, provide, inject, ref, watch, type InjectionKey } fr
 import { storeToRefs } from 'pinia';
 import { pickerStorageSrv } from '@picker/common/services/picker-storage.service';
 import { usePickerFsStore } from '@picker/common/stores/picker-fs.store';
-import { groupPickerFsRoots } from '@picker/common/utils/picker-fs-grouping';
-import { getPickerOperatingSystem } from '@picker/common/utils/operating-system';
+import { groupPickerFsRoots, isRootAvailableInMode, isSystemRoot } from '@picker/common/utils/picker-fs-grouping';
+import { getOperatingSystem } from '@shared/utils/operating-system';
 import type { ListingEntryExtended, RootFsFolderView } from '@shared/types';
 import type { PickerState, PickerWindowState, PickerFile, PickerRootId } from '@picker/common/types';
 import type { DialogRequestState } from '@picker/common/types/dialog-types';
 import { isValidFileName } from '@picker/common/utils/validate-filename';
-import { openFolderTarget, type PickerFolderTarget } from '@picker/common/utils/folder-operations';
+import { parseDefaultSaveLocation } from '@picker/common/utils/default-save-location';
+import {
+  findSaveCollision,
+  openFolderTarget,
+  saveFileFlags,
+  type PickerFolderTarget,
+  type SaveCollision,
+} from '@picker/common/utils/folder-operations';
 
 function createDefaultWindowState(): PickerWindowState {
   return {
@@ -20,58 +27,18 @@ function createDefaultWindowState(): PickerWindowState {
   };
 }
 
-interface DefaultSaveLocation {
-  folderPath: string;
-  fileName: string;
-}
-
-function parseDefaultSaveLocation(defaultPath?: string): DefaultSaveLocation {
-  const normalizedPath = (defaultPath ?? '').trim().replaceAll('\\', '/');
-  if (!normalizedPath) {
-    return {
-      folderPath: '',
-      fileName: '',
-    };
-  }
-
-  // A trailing separator means the caller supplied a folder location rather
-  // than a filename as the final path segment.
-  const pointsToFolder = normalizedPath.endsWith('/');
-  const path = normalizedPath.replace(/^\/+|\/+$/g, '');
-  if (!path) {
-    return {
-      folderPath: '',
-      fileName: '',
-    };
-  }
-
-  const segments = path.split('/').filter(Boolean);
-  if (segments.some(segment => segment === '.' || segment === '..')) {
-    return { folderPath: '', fileName: '' };
-  }
-  if (pointsToFolder) {
-    return {
-      folderPath: segments.join('/'),
-      fileName: '',
-    };
-  }
-
-  const fileName = segments.pop() ?? '';
-
-  return {
-    folderPath: segments.join('/'),
-    fileName,
-  };
-}
-
 function createPickerState(dialogRequest: DialogRequestState) {
   const fsStore = usePickerFsStore();
   const { fsAvailableFolderList, fsList } = storeToRefs(fsStore);
 
-  const categories = computed(() => groupPickerFsRoots(fsAvailableFolderList.value));
+  // roots offered for the current dialog mode; findRoot() and so every FS access
+  // goes through this list, so a root hidden in a mode cannot be used in it
+  const categories = computed(() =>
+    groupPickerFsRoots(fsAvailableFolderList.value.filter(root => isRootAvailableInMode(root, dialogRequest.mode))),
+  );
   const flatRoots = computed<RootFsFolderView[]>(() => categories.value.flatMap(category => category.roots));
   const homeRootId = computed(() => categories.value.find(category => category.key === 'home')?.roots[0]?.id);
-  const operatingSystem = getPickerOperatingSystem();
+  const operatingSystem = getOperatingSystem();
 
   const state = reactive<PickerState>({
     activeRootId: '',
@@ -134,6 +101,11 @@ function createPickerState(dialogRequest: DialogRequestState) {
   }
 
   async function getWritableFs(rootId: PickerRootId): Promise<web3n.files.WritableFS> {
+    const root = findRoot(rootId);
+    if (root && isSystemRoot(root)) {
+      // never hand out (or write into) system storages, whatever the UI shows
+      throw new Error('System storages are available for reading only.');
+    }
     const fs = await getFs(rootId);
     if (!fs.writable || !('writableSubRoot' in fs)) {
       throw new Error('The selected filesystem is read-only.');
@@ -169,11 +141,14 @@ function createPickerState(dialogRequest: DialogRequestState) {
         fsId: root.fsId,
         path,
         operatingSystem,
+        // the picker shows names, sizes and dates only: skip ids, thumbnails etc.
+        withXAttrs: false,
       });
       if (!isLatestLoad(rootId, generation)) {
         return;
       }
-      win.entries = data.map(entry => mapListingEntry(entry, path));
+      // links can be neither opened nor replaced through the dialog API
+      win.entries = data.filter(entry => entry.type !== 'link').map(entry => mapListingEntry(entry, path));
       win.currentPath = path;
       win.status = 'ready';
     } catch (err) {
@@ -231,15 +206,22 @@ function createPickerState(dialogRequest: DialogRequestState) {
     currentWindow.value.sortOrder = sortOrder;
   }
 
+  // Windows naming rules only where the OS file system enforces them
+  const strictNames = computed(() => {
+    const root = findRoot(state.activeRootId);
+    return !root || fsList.value[root.fsId]?.entity.type === 'device';
+  });
+
   function isSaveNameValid(name: string): boolean {
-    return isValidFileName(name);
+    return isValidFileName(name, { strict: strictNames.value });
   }
 
-  function findNameCollision(name: string): PickerFile | undefined {
+  async function findSaveTargetCollision(name: string): Promise<SaveCollision | undefined> {
     if (!name) {
       return undefined;
     }
-    return currentWindow.value.entries.find(entry => entry.name === name);
+    const fs = await getFs(state.activeRootId);
+    return findSaveCollision(fs, currentWindow.value.currentPath, name);
   }
 
   async function initializeDefaultRoot(rootId: PickerRootId): Promise<void> {
@@ -272,24 +254,25 @@ function createPickerState(dialogRequest: DialogRequestState) {
     return Promise.all(paths.map(path => fs.readonlyFile(path)));
   }
 
-  async function resolveSaveFile(): Promise<web3n.files.WritableFile> {
+  /** @param overwrite true only after the user confirmed replacing an existing file */
+  async function resolveSaveFile({ overwrite }: { overwrite: boolean }): Promise<web3n.files.WritableFile> {
     const fs = await getWritableFs(state.activeRootId);
     const path = currentWindow.value.currentPath
       ? `${currentWindow.value.currentPath}/${saveName.value}`
       : saveName.value;
-    return fs.writableFile(path);
+    return fs.writableFile(path, saveFileFlags(overwrite));
   }
 
   const canWrite = computed(() => {
     const root = findRoot(state.activeRootId);
-    return !!root && fsList.value[root.fsId]?.entity.writable === true;
+    return !!root && !isSystemRoot(root) && fsList.value[root.fsId]?.entity.writable === true;
   });
 
   async function getFolderTarget(name = ''): Promise<PickerFolderTarget> {
     const rootId = state.activeRootId;
     const parentPath = currentWindow.value.currentPath;
     const trimmed = name.trim();
-    if (trimmed && !isValidFileName(trimmed)) {
+    if (trimmed && !isValidFileName(trimmed, { strict: strictNames.value })) {
       throw new Error('Invalid folder name.');
     }
     const fs = await getWritableFs(rootId);
@@ -301,7 +284,7 @@ function createPickerState(dialogRequest: DialogRequestState) {
   }
 
   async function createFolder(name: string): Promise<void> {
-    if (!isValidFileName(name)) {
+    if (!isValidFileName(name, { strict: strictNames.value })) {
       throw new Error('Invalid folder name.');
     }
     const rootId = state.activeRootId;
@@ -341,8 +324,9 @@ function createPickerState(dialogRequest: DialogRequestState) {
     navigateToFolder,
     restoreLocation,
     setSort,
-    findNameCollision,
+    findSaveTargetCollision,
     isSaveNameValid,
+    strictNames,
     resolveSelectedFiles,
     resolveSaveFile,
     getFolderTarget,

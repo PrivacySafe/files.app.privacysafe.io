@@ -3,7 +3,7 @@
   "appDomain": "files.app.privacysafe.io",
   "icon": "logo.png",
   "description": "Feature-rich file manager for secure storage of your digital assets.",
-  "version": "0.8.15",
+  "version": "0.8.16",
   "publisher": "Ivy Cyber",
   "website": "https://privacysafe.app",
   "contact": "support@ivycyber.com",
@@ -14,17 +14,13 @@
 
   "components": {
     "/index.html": {
-      "startedBy": "user",
       "runtime": "web-gui",
       "formFactor": ["desktop", "tablet"],
       "capsRequested": {
-        "apps": "opener",
         "logToPlatform": true,
         "mailerid": true,
         "shell": {
           "fileDialog": "all",
-          "clipboard": "all",
-          "userNotifications": true,
           "fsResource": {
             "otherApps": {
               "launcher.app.privacysafe.io": "ui-settings"
@@ -53,7 +49,6 @@
     },
 
     "/index-file-picker.html": {
-      "startedBy": "user",
       "runtime": "web-gui",
       "formFactor": ["desktop", "tablet"],
       "capImpls": [
@@ -67,7 +62,6 @@
       "capsRequested": {
         "logToPlatform": true,
         "shell": {
-          "clipboard": "all",
           "fsResource": {
             "otherApps": {
               "launcher.app.privacysafe.io": "ui-settings"
@@ -79,7 +73,7 @@
           "userFS": "all",
           "sysFS": "all"
         },
-        "appRPC": ["AppStorageInternal"]
+        "appRPC": ["AppStoragePicker"]
       },
       "windowOpts": {
         "width": 800,
@@ -92,7 +86,6 @@
     },
 
     "/index-file-picker-mobile.html": {
-      "startedBy": "user",
       "runtime": "web-gui",
       "formFactor": "phone",
       "capImpls": [
@@ -106,20 +99,18 @@
       "capsRequested": {
         "logToPlatform": true,
         "shell": {
-          "clipboard": "all",
           "fsResource": {
             "otherApps": {
               "launcher.app.privacysafe.io": "ui-settings"
             }
-          },
-          "openDashboard": true
+          }
         },
         "storage": {
           "appFS": "default",
           "userFS": "all",
           "sysFS": "all"
         },
-        "appRPC": ["AppStorageInternal"]
+        "appRPC": ["AppStoragePicker"]
       },
       "windowOpts": {
         "width": 360,
@@ -134,7 +125,10 @@
     "/storageDenoServices.js": {
       "services": {
         "AppStorageInternal": {
-          "thisAppComponents": "*"
+          "thisAppComponents": ["/index.html"]
+        },
+        "AppStoragePicker": {
+          "thisAppComponents": ["/index-file-picker.html", "/index-file-picker-mobile.html"]
         }
       },
       "runtime": "deno",
@@ -142,12 +136,6 @@
         "appRPC": ["AppStorageInternal"],
         "logToPlatform": true,
         "mailerid": true,
-        "shell": {
-          "fileDialog": "all",
-          "userNotifications": true,
-          "openFile": "all",
-          "mountVolumes": "all"
-        },
         "storage": {
           "appFS": "default",
           "userFS": "all",
@@ -171,7 +159,7 @@
   "launchOnSystemStartup": [
     {
       "name": "Storage service",
-      "component": "/storageDenoServices.js.js",
+      "component": "/storageDenoServices.js",
       "icon": "logo.png",
       "description": "Feature-rich file manager for secure storage of your digital assets."
     }

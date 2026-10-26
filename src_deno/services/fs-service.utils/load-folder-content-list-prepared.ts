@@ -24,12 +24,23 @@ import {
 import { getFsStat } from '../../../shared/utils/fs-utils/index.ts';
 import { getXAttrs, listXAttrs } from './actions-on-x-attrs.ts';
 import { loadFolderContentList } from './load-folder-content-list.ts';
+import { mapWithConcurrency } from '../../../shared/utils/processes/map-with-concurrency.ts';
+import { isListingXAttr, isValidListingXAttrValue } from './listing-xattrs.ts';
 import type { ListingEntry, ListingEntryExtended } from '../../../shared/types/index.ts';
+
+// entities prepared in parallel: each one takes several calls to the platform
+const LISTING_CONCURRENCY = 8;
+
+// OS folders in the user's home on the device, which the app does not show
+const MACOS_HIDDEN_HOME_FOLDERS = ['desktop', 'applications', 'library'];
+// the Windows registry hive files in the user's profile folder
+const WINDOWS_HIDDEN_HOME_FILE = /^ntuser\.(dat|ini|pol)/i;
 
 function whetherToProcessThisEntity(
   entity: ListingEntry,
   trashFolderName: string,
   os: 'macos' | 'linux' | 'windows',
+  isDeviceHome: boolean,
 ): boolean {
   const { name, isFolder } = entity;
 
@@ -38,11 +49,17 @@ function whetherToProcessThisEntity(
     return false;
   }
 
-  if (os === 'windows' && isFolder && name.toLowerCase() === 'ntuser.dat') {
+  // OS-specific entries exist only at the top of the user's home on the device;
+  // folders with these names in 3N storages are the user's own and are shown
+  if (!isDeviceHome) {
+    return true;
+  }
+
+  if (os === 'windows' && !isFolder && WINDOWS_HIDDEN_HOME_FILE.test(name)) {
     return false;
   }
 
-  return !(os === 'macos' && ['desktop', 'applications', 'library'].includes(name.toLowerCase()));
+  return !(os === 'macos' && isFolder && MACOS_HIDDEN_HOME_FOLDERS.includes(name.toLowerCase()));
 }
 
 export async function loadFolderContentListPrepared({
@@ -52,6 +69,7 @@ export async function loadFolderContentListPrepared({
   trashFolderName,
   operatingSystem,
   version,
+  withXAttrs = true,
 }: {
   fs: web3n.files.WritableFS;
   path: string;
@@ -59,6 +77,8 @@ export async function loadFolderContentListPrepared({
   trashFolderName: string;
   operatingSystem: 'macos' | 'linux' | 'windows';
   version?: number;
+  /** false skips the extended attributes (ids, thumbnails, favorites): much fewer calls */
+  withXAttrs?: boolean;
 }): Promise<ListingEntryExtended[]> {
   try {
     const folderPath = formatPath(prepareFolderPath([basePath, path]));
@@ -69,122 +89,113 @@ export async function loadFolderContentListPrepared({
 
     const isThisFsDevice = fs.type === 'device';
 
-    const preparedList: ListingEntryExtended[] = [];
-    let brokeReason = '';
+    async function prepareEntry(item: ListingEntry): Promise<ListingEntryExtended> {
+      let brokeReason = '';
+      const prepareErrorMsg = (errorTxt: string) => {
+        brokeReason = brokeReason
+          ? brokeReason.includes(errorTxt)
+            ? brokeReason
+            : `${brokeReason}. ${errorTxt}`
+          : errorTxt;
+      };
 
-    const prepareErrorMsg = (errorTxt: string) => {
-      brokeReason = brokeReason
-        ? brokeReason.includes(errorTxt)
-          ? brokeReason
-          : `${brokeReason}. ${errorTxt}`
-        : errorTxt;
-    };
-
-    for (const item of list) {
-      if (whetherToProcessThisEntity(item, trashFolderName, operatingSystem)) {
-        brokeReason = '';
-        const compoundPath = formatPath(prepareFolderPath([folderPath, item.name]));
-        const stats = await getFsStat({ fs, path: compoundPath, vAPI: !!fs.v }).catch(() =>
-          prepareErrorMsg('Stat reading'),
-        );
-
-        const xAttrs = isThisFsDevice
-          ? []
-          : await listXAttrs({ fs, path: compoundPath, version }).catch(err => {
+      const compoundPath = formatPath(prepareFolderPath([folderPath, item.name]));
+      const [stats, xAttrs] = await Promise.all([
+        getFsStat({
+          fs,
+          path: compoundPath,
+          vAPI: !!fs.v,
+          ...(version && { flags: { remoteVersion: version } }),
+        }).catch(() => {
+          prepareErrorMsg('Stat reading');
+          return undefined;
+        }),
+        isThisFsDevice || !withXAttrs
+          ? ([] as string[])
+          : listXAttrs({ fs, path: compoundPath, version }).catch(err => {
               prepareErrorMsg(err.message || `Reading xAttr list`);
-              return [];
-            });
+              return [] as string[];
+            }),
+      ]);
 
-        const someEntryListingFields: Pick<
-          ListingEntryExtended,
-          'id' | 'ext' | 'parentFolder' | 'originalName' | 'thumbnail' | 'favoriteId' | 'tags' | 'sync' | 'hidden'
-        > = {
-          id: isThisFsDevice
-            ? prepareFsEntityId(fs, compoundPath)
-            : (await getXAttrs<string>({
-                fs,
-                fullPath: compoundPath,
-                attrName: 'id',
-                propagationStop: true,
-                version,
-                actionIfError: () => {
-                  prepareErrorMsg(`Reading 'id' attr`);
-                  return prepareFsEntityId(fs, compoundPath);
-                },
-              })) || prepareFsEntityId(fs, compoundPath),
-          ext: undefined,
-          parentFolder: '',
-          originalName: '',
-          thumbnail: undefined,
-          favoriteId: undefined,
-          tags: [],
-          sync: undefined,
-          hidden: undefined,
-        };
+      const readAttr = <T>(attrName: string) =>
+        getXAttrs<T>({
+          fs,
+          fullPath: compoundPath,
+          attrName,
+          version,
+          propagationStop: true,
+          actionIfError: () => prepareErrorMsg(`Reading '${attrName}' attr`),
+        });
 
-        const computedFileExt = getFileExtension(item.name);
-        someEntryListingFields.ext = !item.isFile
-          ? `@${item.isFolder ? 'folder' : 'link'}-${item.name}`
-          : isThisFsDevice
-            ? computedFileExt
-            : (await getXAttrs<string>({
-                fs,
-                fullPath: compoundPath,
-                attrName: 'ext',
-                version,
-                propagationStop: true,
-                actionIfError: () => {
-                  prepareErrorMsg(`Reading 'ext' attr`);
-                  return computedFileExt;
-                },
-              })) || computedFileExt;
+      const fields: Pick<
+        ListingEntryExtended,
+        'id' | 'ext' | 'parentFolder' | 'originalName' | 'thumbnail' | 'favoriteId' | 'tags' | 'sync' | 'hidden'
+      > = {
+        id: prepareFsEntityId(fs, compoundPath),
+        ext: item.isFile ? getFileExtension(item.name) : `@${item.isFolder ? 'folder' : 'link'}-${item.name}`,
+        parentFolder: '',
+        originalName: '',
+        thumbnail: undefined,
+        favoriteId: undefined,
+        tags: [],
+        sync: undefined,
+        hidden: undefined,
+      };
 
-        if (!isThisFsDevice) {
-          for (const xAttr of xAttrs) {
-            if (xAttr === 'tags') {
-              someEntryListingFields.tags = await getXAttrs<string[]>({
-                fs,
-                fullPath: compoundPath,
-                attrName: 'tags',
-                version,
-                propagationStop: true,
-                actionIfError: () => {
-                  prepareErrorMsg(`Reading 'tags' attr`);
-                  return [] as string[];
-                },
-              });
-            } else if (!['id', 'ext'].includes(xAttr)) {
-              // @ts-ignore
-              someEntryListingFields[xAttr] = await getXAttrs<string>({
-                fs,
-                fullPath: compoundPath,
-                attrName: xAttr,
-                version,
-                propagationStop: true,
-                actionIfError: () => prepareErrorMsg(`Reading '${xAttr}' attr`),
-              });
+      // only the attributes the entity has are read, and all of them at once
+      await Promise.all(
+        xAttrs.map(async xAttr => {
+          if (xAttr === 'id') {
+            const value = await readAttr<unknown>('id');
+            if (typeof value === 'string' && value) {
+              fields.id = value;
+            }
+          } else if (xAttr === 'ext') {
+            const value = await readAttr<unknown>('ext');
+            if (item.isFile && typeof value === 'string' && value) {
+              fields.ext = value;
+            }
+          } else if (xAttr === 'tags') {
+            const value = await readAttr<unknown>('tags');
+            if (Array.isArray(value) && value.every(tag => typeof tag === 'string')) {
+              fields.tags = value;
+            }
+          } else if (isListingXAttr(xAttr)) {
+            const value = await readAttr<unknown>(xAttr);
+            if (value !== undefined && isValidListingXAttrValue(xAttr, value)) {
+              (fields as Record<string, unknown>)[xAttr] = value;
             }
           }
-        }
+        }),
+      );
 
-        preparedList.push({
-          name: item.name,
-          fullPath: compoundPath,
-          type: item.isFile ? 'file' : item.isFolder ? 'folder' : 'link',
-          ...(!item.isFolder && stats?.size && { size: stats.size }),
-          ...(stats?.mtime && { mtime: stats.mtime }),
-          ...(stats?.ctime && { ctime: stats.ctime }),
-          ...(stats?.version && { version: stats.version }),
-          ...(stats?.bytesNeedDownload && { bytesNeedDownload: stats.bytesNeedDownload }),
-          brokeReason,
-          ...someEntryListingFields,
-        });
-      }
+      // fields from the FS itself go last: nothing read from xattrs may replace them
+      return {
+        ...fields,
+        name: item.name,
+        fullPath: compoundPath,
+        type: item.isFile ? 'file' : item.isFolder ? 'folder' : 'link',
+        ...(!item.isFolder && stats?.size && { size: stats.size }),
+        ...(stats?.mtime && { mtime: stats.mtime }),
+        ...(stats?.ctime && { ctime: stats.ctime }),
+        ...(stats?.version && { version: stats.version }),
+        ...(stats?.bytesNeedDownload && { bytesNeedDownload: stats.bytesNeedDownload }),
+        brokeReason,
+      };
     }
 
-    return preparedList;
+    const isDeviceHome = isThisFsDevice && folderPath === '';
+    const entriesToShow = list.filter(item =>
+      whetherToProcessThisEntity(item, trashFolderName, operatingSystem, isDeviceHome),
+    );
+    return await mapWithConcurrency(entriesToShow, LISTING_CONCURRENCY, prepareEntry);
   } catch (e) {
     await w3n.log!('error', `An error reading of ${path} folder. `, e);
-    return [];
+    if (version) {
+      // a remote version that cannot be listed is shown as empty in the conflicts dialog
+      return [];
+    }
+    throw e;
   }
 }

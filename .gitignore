@@ -6,7 +6,7 @@ node_modules
 /test-runner
 /test-data
 /temp
-/test-setup.*
+/test-setup.json
 /test-user*.json
 /setup-w3n.bundle.js
 

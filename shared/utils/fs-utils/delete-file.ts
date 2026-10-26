@@ -24,7 +24,7 @@ export async function deleteFile({
   stopErrorPropagate?: boolean;
 }): Promise<void> {
   try {
-    return fs.deleteFile(path);
+    return await fs.deleteFile(path);
   } catch (err) {
     console.log(
       `🔥 [deleteFile] Error deleting the file '${path}' . 'stopErrorPropagate' flag is ${stopErrorPropagate} .`,

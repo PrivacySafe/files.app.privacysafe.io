@@ -31,6 +31,7 @@
 <style lang="scss" module>
   .app {
     --main-toolbar-height: calc(var(--spacing-s) * 9);
+
     position: fixed;
     inset: 0;
   }

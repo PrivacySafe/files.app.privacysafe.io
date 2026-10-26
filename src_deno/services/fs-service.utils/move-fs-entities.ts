@@ -17,6 +17,8 @@
 /// <reference path="../../../@types/platform-defs/injected-w3n.d.ts" />
 import { moveFsEntity } from './move-fs-entity.ts';
 import { getEntityTargetPath } from './get-entity-target-path.ts';
+import { relocateFavorites } from './relocate-favorites.ts';
+import { getEntityNameAndParent } from '../../../shared/utils/fs-utils/index.ts';
 import type { FsListItem, ListingEntryExtended } from '../../../shared/types/index.ts';
 import type { FavoritesService } from '../../types.ts';
 
@@ -38,50 +40,33 @@ export async function moveFsEntities({
   const pathsMap: Record<string, string> = {};
 
   try {
-    const favoriteFoldersForProcessing: Array<ListingEntryExtended & { newFullPath: string }> = [];
-
     for (const entity of entities) {
-      const { type, favoriteId } = entity;
-      console.log('$$$$$ MOVE-FS-ENTITES, getEntityTargetPath');
       const entityTargetPath = await getEntityTargetPath({
         fs: targetFsListItem.entity,
-        entity: entity,
+        srcFs: fsListItem.entity,
+        entity,
         targetFolder,
       });
-      pathsMap[entity.fullPath] = entityTargetPath;
+      const { entityName: targetEntityName } = getEntityNameAndParent(entityTargetPath);
 
       await moveFsEntity({
         fsListItem,
-        entity: entity,
+        entity,
         targetFsListItem,
         targetFolder,
+        targetEntityName,
       });
+      pathsMap[entity.fullPath] = entityTargetPath;
 
-      const favoriteFolders = await favoritesSrv.getFavorites();
-      if (type === 'folder' && favoriteId) {
-        const isFavoriteFolderInList = !!favoriteFolders.find(fav => fav.favId === favoriteId);
-        isFavoriteFolderInList &&
-          favoriteFoldersForProcessing.push({
-            ...entity,
-            newFullPath: entityTargetPath,
-          });
+      if (entity.type === 'folder') {
+        await relocateFavorites({
+          favoritesSrv,
+          fsId: fsListItem.fsId,
+          oldPath: entity.fullPath,
+          newFsId: targetFsId,
+          newPath: entityTargetPath,
+        });
       }
-    }
-
-    if (favoriteFoldersForProcessing.length) {
-      const processes: Promise<void>[] = [];
-      for (const folder of favoriteFoldersForProcessing) {
-        const { favoriteId, newFullPath } = folder;
-        processes.push(
-          favoritesSrv.updateFavorite({
-            fsId: targetFsId,
-            favId: favoriteId!,
-            fullPath: newFullPath,
-          }),
-        );
-      }
-
-      await Promise.allSettled(processes);
     }
 
     return pathsMap;

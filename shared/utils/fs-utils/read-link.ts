@@ -24,7 +24,7 @@ export async function readLink({
   stopErrorPropagate?: boolean;
 }): Promise<web3n.files.SymLink | undefined> {
   try {
-    return fs.readLink(path);
+    return await fs.readLink(path);
   } catch (err) {
     console.log(
       `🔥 [readLink] Error reading of the link '${path}' . 'stopErrorPropagate' flag is ${stopErrorPropagate} .`,

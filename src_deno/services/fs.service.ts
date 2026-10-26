@@ -29,6 +29,7 @@ import { copyFsEntities } from './fs-service.utils/copy-fs-entities.ts';
 import { moveFsEntity } from './fs-service.utils/move-fs-entity.ts';
 import { moveFsEntities } from './fs-service.utils/move-fs-entities.ts';
 import { renameFsEntity } from './fs-service.utils/rename-fs-entity.ts';
+import { relocateFavorites } from './fs-service.utils/relocate-favorites.ts';
 import { deleteFsEntities } from './fs-service.utils/delete-fs-entities.ts';
 import { restoreFsEntities as _restoreFsEntities } from './fs-service.utils/restore-fs-entities.ts';
 
@@ -75,7 +76,7 @@ export function fsService({
   }): Promise<FavoriteFolder[] | undefined> {
     try {
       if (!fsId.includes('-device')) {
-        const updatedFolderList = await favoritesSrv.deleteFavorite(id);
+        const updatedFolderList = await favoritesSrv.deleteFavorite(id, true);
         await deleteEntityXAttrs({ fsId, path: fullPath, attrNames: ['favoriteId'] });
         return updatedFolderList;
       }
@@ -88,7 +89,7 @@ export function fsService({
 
   async function removeFavoriteFolderFromList(id: string): Promise<FavoriteFolder[] | undefined> {
     try {
-      return favoritesSrv.deleteFavorite(id);
+      return await favoritesSrv.deleteFavorite(id, true);
     } catch (err) {
       w3n.log('error', `Failed while removing the favorite folder with ID ${id} from the list. `, err);
     }
@@ -292,12 +293,14 @@ export function fsService({
     basePath = '',
     operatingSystem,
     version,
+    withXAttrs,
   }: {
     fsId: string;
     path: string;
     basePath?: string;
     operatingSystem: 'macos' | 'linux' | 'windows';
     version?: number;
+    withXAttrs?: boolean;
   }): Promise<ListingEntryExtended[]> {
     const fsListItem = await getFsItem(fsId);
     return loadFolderContentListPrepared({
@@ -307,6 +310,7 @@ export function fsService({
       trashFolderName,
       operatingSystem,
       version,
+      withXAttrs,
     });
   }
 
@@ -401,7 +405,14 @@ export function fsService({
     newName: string;
   }): Promise<void> {
     const fsListItem = await getFsItem(fsId);
-    await renameFsEntity({ fsListItem, entity, targetFsListItem: fsListItem, newName });
+    const newPath = await renameFsEntity({ fsListItem, entity, targetFsListItem: fsListItem, newName });
+    if (!newPath) {
+      // the reason is logged by renameFsEntity; the caller has to know that nothing changed
+      throw new Error(`The entity '${entity.name}' was not renamed.`);
+    }
+    if (entity.type === 'folder') {
+      await relocateFavorites({ favoritesSrv, fsId, oldPath: entity.fullPath, newFsId: fsId, newPath });
+    }
   }
 
   async function deleteEntities({
@@ -412,7 +423,7 @@ export function fsService({
     fsId: string;
     entities: Pick<ListingEntryExtended, 'fullPath' | 'type' | 'name'>[];
     completely?: boolean;
-  }): Promise<Record<string, string> | boolean | undefined> {
+  }): Promise<Record<string, string> | true> {
     if (!entities || !Array.isArray(entities) || entities.length === 0) {
       throw new Error('There are no FS objects to delete.');
     }

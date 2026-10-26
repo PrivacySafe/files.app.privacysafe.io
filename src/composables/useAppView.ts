@@ -22,9 +22,11 @@ import isEmpty from 'lodash/isEmpty';
 import { useAppStore, useFsStore, useSyncQueueStore, useFavoriteStore } from '@/store';
 import {
   DIALOGS_KEY,
+  NOTIFICATIONS_KEY,
   THEME_KEY,
   VUEBUS_KEY,
   type DialogsPlugin,
+  type NotificationsPlugin,
   type ThemePlugin,
   type VueBusPlugin,
 } from '@v1nt1248/3nclient-lib/plugins';
@@ -33,19 +35,40 @@ import { makeServiceCaller } from '@shared/utils/ipc/ipc-service-caller';
 import {
   AppGlobalEvents,
   StorageConnectionStatusEvent,
+  StorageEntityRenameEvent,
   StorageEventPayloadWithPath,
   StorageFavoritesUpdateEvent,
 } from '@shared/types';
 import type { StorageAppDenoService } from '@deno/types';
 import forEach from 'lodash/forEach';
-import { appStorageSrv } from '@/services/services-provider.ts';
-import { STUCK_SYNCHRONIZATION_TIME_CHECKING } from '@shared/constants';
+import { STUCK_SYNCHRONIZATION_TIME_CHECKING, USER_FS, USER_TRASH_FOLDER } from '@shared/constants';
+import { appStorageSrv } from '@/services/services-provider';
+import { createServiceHealthCheck } from '@/utils/service-health';
+import { getWindowPathAfterRename } from '@/utils/path-after-rename';
+import { getEntityNameAndParent } from '@shared/utils/fs-utils';
+import { useNavigation } from '@/composables/useNavigation';
 
 export function useAppView() {
   const { t, locale } = useI18n();
   const { $emitter } = inject<VueBusPlugin<AppGlobalEvents>>(VUEBUS_KEY)!;
   const { $openDialog } = inject<DialogsPlugin>(DIALOGS_KEY)!;
   const { setTheme } = inject<ThemePlugin>(THEME_KEY)!;
+  const notifications = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
+
+  // Without the storage service nothing works and progress indicators spin forever,
+  // so the user is told once to restart the app.
+  const serviceHealth = createServiceHealthCheck({
+    ping: () => appStorageSrv.getSyncQueue(),
+    onUnavailable: reason => {
+      w3n.log('error', 'The storage service does not answer. ', reason);
+      notifications.$createNotice({
+        type: 'error',
+        withIcon: true,
+        duration: 0,
+        content: t('app.message.service_unavailable'),
+      });
+    },
+  });
 
   const fsStore = useFsStore();
 
@@ -83,11 +106,21 @@ export function useAppView() {
 
   const { setFavoriteFolderListValue } = useFavoriteStore();
 
+  const {
+    isSplittedMode,
+    window1FsId,
+    window1RootFolderId,
+    window1FolderPath,
+    window2FsId,
+    window2RootFolderId,
+    window2FolderPath,
+    navigateToRouteSingle,
+    navigateToRouteDouble,
+  } = useNavigation();
+
   const appElement = ref<HTMLDivElement | null>(null);
 
   const isFillingUpSyncQueue = ref(false);
-
-  const connectivityTimerId = ref<ReturnType<typeof setInterval> | undefined>();
 
   const connectivityStatusText = computed(() =>
     connectivityStatus.value === 'online' ? 'app.status.online' : 'app.status.offline',
@@ -110,6 +143,50 @@ export function useAppView() {
   watch(lang, value => (locale.value = value), { immediate: true });
 
   w3n.connectivity?.isOnline().then(res => setConnectivityStatus(res.includes('online')));
+
+  function windowPathAfterRename(windowIndex: 1 | 2, renaming: StorageEntityRenameEvent['payload']): string | null {
+    const fsId = windowIndex === 1 ? window1FsId.value : window2FsId.value;
+    if (fsId !== USER_FS) {
+      return null;
+    }
+
+    const rootFolderId = windowIndex === 1 ? window1RootFolderId.value : window2RootFolderId.value;
+    const windowPath = (windowIndex === 1 ? window1FolderPath.value : window2FolderPath.value) || '';
+    return getWindowPathAfterRename({
+      windowPath,
+      basePath: rootFolderId === USER_TRASH_FOLDER ? (fsStore.trashFolderName ?? '') : '',
+      parentPath: renaming.path,
+      oldName: renaming.oldName,
+      newName: renaming.newName,
+    });
+  }
+
+  /**
+   * A window showing a renamed folder (or a folder inside it) follows it to the new path.
+   * Otherwise it stays on the old path, and a new file or folder created there makes a new
+   * folder with the old name.
+   */
+  async function followRenamedFolder(renaming: StorageEntityRenameEvent['payload']) {
+    const path = windowPathAfterRename(1, renaming);
+    const path2 = isSplittedMode.value ? windowPathAfterRename(2, renaming) : null;
+    if (path === null && path2 === null) {
+      return;
+    }
+
+    if (isSplittedMode.value) {
+      await navigateToRouteDouble({
+        query: {
+          ...(path !== null && { path }),
+          ...(path2 !== null && { path2 }),
+        },
+        replace: true,
+      });
+    } else {
+      await navigateToRouteSingle({ query: { path: path! }, replace: true });
+    }
+    // the info block may show an entity by its old path
+    $emitter.emit('click:breadcrumb', void 0);
+  }
 
   async function appExit() {
     w3n.closeSelf!();
@@ -139,6 +216,8 @@ export function useAppView() {
   }
 
   let st1: ReturnType<typeof setInterval>;
+  let stopWatchingStorageEvents: (() => void) | undefined;
+  let closeStorageEventsConnection: (() => void) | undefined;
   onBeforeMount(async () => {
     try {
       await fsStore.initializeFsItems();
@@ -151,12 +230,9 @@ export function useAppView() {
 
       const storageSrvConnection = await w3n.rpc!.thisApp!('AppStorageInternal');
       const storageSrv = makeServiceCaller(storageSrvConnection, [], ['watchEvent']) as StorageAppDenoService;
-      storageSrv.watchEvent({
+      closeStorageEventsConnection = () => storageSrvConnection.close();
+      stopWatchingStorageEvents = storageSrv.watchEvent({
         next: async eventObj => {
-          if (eventObj.event !== 'connectivity:change') {
-            console.log('🔔 WATCH EVENT FROM DENO => ', JSON.stringify(eventObj));
-          }
-
           const { event, payload } = eventObj;
           const path = hasIn(payload, 'path')
             ? (payload as StorageEventPayloadWithPath).path === '.'
@@ -178,8 +254,8 @@ export function useAppView() {
             }
 
             case 'sync_queue:update': {
-              const { syncQueue } = payload;
-              onUpdateQueue(Object.values(syncQueue));
+              const { syncQueue: queueFromEvent } = payload;
+              onUpdateQueue(Object.values(queueFromEvent));
               isFillingUpSyncQueue.value = !isEmpty(syncQueue.value);
               break;
             }
@@ -285,38 +361,47 @@ export function useAppView() {
                   },
                 });
                 $emitter.emit('refresh:data', { path: '', withoutVerify: true });
+              } else if (path) {
+                // the window showing the folder shows the banner, its parent shows the new status
+                $emitter.emit('sync:conflict', { path });
+                $emitter.emit('refresh:data', { path: getEntityNameAndParent(path).parentFolder });
               }
 
               break;
             }
 
+            case 'entity:rename': {
+              await followRenamedFolder(payload as StorageEntityRenameEvent['payload']);
+              break;
+            }
+
             case 'sync:error': {
-              console.log('🔥 ERROR EVENT FROM DENO => ', payload);
+              w3n.log('error', 'The storage service reports a sync error. ', payload);
               break;
             }
           }
         },
-        error: e => w3n.log('error', '🔥 Error watching storage events. ', e),
+        error: e => {
+          w3n.log('error', '🔥 Error watching storage events. ', e);
+          serviceHealth.reportFailure(e);
+        },
         complete: () => storageSrvConnection.close(),
       });
+      serviceHealth.start();
 
+      // Hides progress indicators that got no events for a long time. The sync
+      // queue itself is managed by the Deno service: removing an item here would
+      // silently drop a slow upload (e.g. one paused while offline).
       st1 = setInterval(() => {
-        console.log('[*] Checking that there are no "stuck" synchronization operations [*]');
-        forEach(Object.fromEntries(uploadProcesses.value), async (data, path) => {
-          const { lastUpdate } = data;
-          const diff = Date.now() - lastUpdate;
-          if (diff > STUCK_SYNCHRONIZATION_TIME_CHECKING) {
+        forEach(Object.fromEntries(uploadProcesses.value), (data, path) => {
+          if (Date.now() - data.lastUpdate > STUCK_SYNCHRONIZATION_TIME_CHECKING) {
             removeProcess({ action: 'upload', path });
-            await appStorageSrv.deleteSyncQueueItem(path);
           }
         });
 
-        forEach(Object.fromEntries(downloadProcesses.value), async (data, path) => {
-          const { lastUpdate } = data;
-          const diff = Date.now() - lastUpdate;
-          if (diff > STUCK_SYNCHRONIZATION_TIME_CHECKING) {
+        forEach(Object.fromEntries(downloadProcesses.value), (data, path) => {
+          if (Date.now() - data.lastUpdate > STUCK_SYNCHRONIZATION_TIME_CHECKING) {
             removeProcess({ action: 'download', path });
-            await appStorageSrv.deleteSyncQueueItem(path);
           }
         });
       }, 60000);
@@ -336,10 +421,11 @@ export function useAppView() {
 
   onBeforeUnmount(() => {
     stopWatchingAppConfig();
-
-    if (connectivityTimerId.value) {
-      clearInterval(connectivityTimerId.value);
-    }
+    resizeObserver.disconnect();
+    // first: closing the connection below must not be reported as an unavailable service
+    serviceHealth.stop();
+    stopWatchingStorageEvents?.();
+    closeStorageEventsConnection?.();
 
     if (st1) {
       clearInterval(st1);

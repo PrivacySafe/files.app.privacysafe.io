@@ -19,20 +19,17 @@
   const { t } = useI18n();
   const bus = inject<VueBusPlugin<AppGlobalEvents>>(VUEBUS_KEY)!;
 
-  const { saveFileBaseOnOsFileSystemFile } = useFsStore();
+  const { uploadOsFiles } = useFsStore();
 
   async function onFilesSelect(value: File[] | FileList) {
     try {
       emits('loading', true);
-      const files = [...value] as File[];
-      for (const file of files) {
-        await saveFileBaseOnOsFileSystemFile({
-          fsId: props.fsId,
-          uploadedFile: file,
-          folderPath: props.path,
-          withThumbnail: true,
-        });
-      }
+      await uploadOsFiles({
+        fsId: props.fsId,
+        files: [...value] as File[],
+        folderPath: props.path,
+        withThumbnail: true,
+      });
       bus.$emitter.emit('upload:file', { fsId: props.fsId, fullPath: props.path });
     } finally {
       emits('loading', false);

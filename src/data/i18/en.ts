@@ -43,6 +43,10 @@ export const en = {
     sync: {
       start: 'The process of synchronizing folders/files is in progress',
     },
+    message: {
+      service_unavailable:
+        'The storage service has stopped responding. Changes are not synchronized. Please restart the app.',
+    },
     upload: 'Upload',
     upload_file: 'Upload File',
     adopt: 'Adopt',
@@ -72,6 +76,7 @@ export const en = {
       required: 'This field is required. ',
       equality: 'The old and new values must not be equal. ',
       length: 'No more then {length} characters ',
+      invalid_name: "A name must not be '.' or '..' and must not contain '/' or '\\'. ",
     },
   },
 
@@ -122,6 +127,7 @@ export const en = {
       cloud_text: 'Cloud',
       local_text: 'Local',
       checkbox_text: 'Keep this option for all conflicting objects',
+      error: "Couldn't resolve the conflict of '{name}'.",
     },
     restore: {
       text: 'There is already an object named "{name}" in this folder | There are already objects named "{name}" in this folder',
@@ -146,6 +152,7 @@ export const en = {
     text: {
       resolve_root: 'Please resolve conflict at the Home directory',
       resolve_trash: 'Please resolve conflict at the Trash directory',
+      resolve_folder: 'Folder "{name}" has a conflict: changes from other devices are not shown',
     },
   },
 
@@ -157,6 +164,19 @@ export const en = {
   },
 
   fs: {
+    sync_state: {
+      synced: 'synced',
+      unsynced: 'unsynced',
+      behind: 'behind',
+      conflicting: 'conflicting',
+      remote: 'remote',
+    },
+    load_error: "Couldn't load this folder.",
+    rename_error: "Couldn't rename '{name}'.",
+    upload_error: "Couldn't upload the file {names}. | Couldn't upload the files: {names}.",
+    create_folder_error: "Couldn't create the folder '{name}'.",
+    target_folder_missing: "The folder '{path}' was renamed or removed. Open the folder again and repeat.",
+    favorite_error: "Couldn't update the favorites.",
     folder_name: {
       user_synced_home: 'Home',
       user_local_home: 'Home (local)',
@@ -197,6 +217,10 @@ export const en = {
         tags: 'Tags',
         status: 'Sync Status',
         calculate_hash: 'Calculate hash',
+        sync_state: 'state',
+        local_version: 'local ver',
+        synced_version: 'synced ver',
+        remote_version: 'remote ver',
       },
       button: {
         restore_replace: 'Replace',
@@ -220,6 +244,7 @@ export const en = {
             'Error while downloading the selected object. | Error while downloading the selected objects ({count}).',
           copy: 'Error while copying the selected object. | Error while copying the selected objects ({count}).',
           move: 'Error while moving the selected object. | Error while moving the selected objects ({count}).',
+          into_itself: "A folder can't be copied or moved into itself or its subfolder.",
           open: 'Could not open "{name}"',
         },
       },
@@ -283,18 +308,13 @@ export const en = {
       cancel: '@:dialog.button.cancel',
       select: 'Select',
       save: 'Save',
-      go: 'Go',
       proceed: 'Proceed',
-      next: 'Next',
-      enter: 'Enter',
       new_folder: 'New Folder',
       create: 'Create',
       use_folder: 'Use folder',
       select_this_folder: 'Select this folder',
     },
-    selected_items: 'Items selected',
-    sidebar_title: 'Browse',
-    tab_3n_storage: '3N Storage',
+    selected_items: '{count} item selected | {count} items selected',
     notification: {
       error: {
         invalid_filename:
@@ -302,6 +322,7 @@ export const en = {
         save_file: 'Failed to save file',
         open_file: 'Failed to open the selected file',
         folder_name_collision: 'A folder with that name already exists. Please choose a different name.',
+        link_name_collision: 'A link with that name already exists. Please choose a different name.',
         open_folder: 'Failed to open folder.',
         save_folder: 'Failed to prepare folder for saving.',
         create_folder: 'Failed to create folder. Check the name and your access to this location.',

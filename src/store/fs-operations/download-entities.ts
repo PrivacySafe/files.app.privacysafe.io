@@ -25,8 +25,7 @@ export async function downloadEntities({
   entities: ListingEntryExtended[];
 }): Promise<void> {
   try {
-    // @ts-ignore
-    const targetFs = await w3n?.shell?.fileDialogs?.saveFolderDialog('Select a folder for downloading', 'Ok');
+    const targetFs = await w3n?.shell?.fileDialogs?.saveFolderDialog?.('Select a folder for downloading', 'Ok', '');
 
     if (!targetFs) {
       return;
@@ -55,7 +54,7 @@ export async function downloadEntities({
 
           if (link.isFolder) {
             await saveFolder({ fs: targetFs, folder: data as web3n.files.ReadonlyFS, dst: name });
-            return;
+            continue;
           }
 
           if (link.isFile) {

@@ -28,7 +28,7 @@ export async function copyFolder({
   stopErrorPropagate?: boolean;
 }): Promise<void> {
   try {
-    return fs.copyFolder(src, dst, mergeAndOverwrite);
+    return await fs.copyFolder(src, dst, mergeAndOverwrite);
   } catch (err) {
     console.log(
       `🔥 [copyFolder] Error copying the folder '${src}' . 'stopErrorPropagate' flag is ${stopErrorPropagate} .`,

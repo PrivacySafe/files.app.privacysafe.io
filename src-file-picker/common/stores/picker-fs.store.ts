@@ -10,8 +10,9 @@ export const usePickerFsStore = defineStore('picker-fs', () => {
   const fsList = shallowRef<Record<string, FsListItem>>({});
   const fsFolderList = ref<RootFsFolderView[]>([]);
 
-  // Current picker requirements are fixed: Home, Device and System roots are
-  // available; local-user storage is intentionally not exposed.
+  // Home, Device and System roots; local-user storage is intentionally not
+  // exposed. Which of them a dialog mode offers is decided by
+  // isRootAvailableInMode() (system roots: openFile only).
   const fsAvailableFolderList = computed(() =>
     fsFolderList.value.filter(
       folder =>

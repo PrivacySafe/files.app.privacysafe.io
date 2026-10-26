@@ -13,6 +13,8 @@
 
   const props = defineProps<{
     dialogProps?: Ui3nDialogComponentProps<boolean>;
+    /** Windows naming rules; true unless the caller says otherwise */
+    strictNames?: boolean;
     data: string;
   }>();
 
@@ -26,7 +28,7 @@
 
   const isRenameValid = computed(() => {
     const trimmed = newName.value.trim();
-    return !!trimmed && trimmed !== props.data && isValidFileName(trimmed);
+    return !!trimmed && trimmed !== props.data && isValidFileName(trimmed, { strict: props.strictNames !== false });
   });
 
   function handleOverwrite() {

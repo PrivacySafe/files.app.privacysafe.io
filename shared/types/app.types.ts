@@ -55,6 +55,8 @@ export interface AppGlobalEvents {
   'upload:file': { fsId: string; fullPath: string };
   'drag:end': void;
   'refresh:data': { path: string; withoutVerify?: boolean };
+  // a folder (neither the root nor the trash) has become conflicting
+  'sync:conflict': { path: string };
   'click:breadcrumb': void;
 }
 

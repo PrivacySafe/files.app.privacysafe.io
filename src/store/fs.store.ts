@@ -25,6 +25,7 @@ import { useAppStore } from '@/store/app.store';
 import type { FileW, FsListItem, ListingEntryExtended, RootFsFolderView } from '@shared/types';
 import { START_OF_SYSTEM_FS_ID, USER_DEVICE_FS, USER_FS, USER_LOCAL_FS } from '@shared/constants';
 import { getListFolder } from '@shared/utils/fs-utils';
+import { formatPath } from '@shared/utils/various';
 
 // Relative to the mount area provided by the platform, not an OS path.
 const HOME_MOUNT_PATH = ['Home'];
@@ -64,7 +65,6 @@ export const useFsStore = defineStore('fs', () => {
   const {
     getFsList,
     getFsRootFolderList,
-    initializeFsItems: _initializeFsItems,
     getTrashFolderName,
     isEntityPresent,
     getEntityStats,
@@ -270,11 +270,13 @@ export const useFsStore = defineStore('fs', () => {
     uploadedFile,
     folderPath,
     withThumbnail,
+    onProgress,
   }: {
     fsId: string;
     uploadedFile: File;
     folderPath: string;
     withThumbnail?: boolean;
+    onProgress?: (bytesWritten: number, totalBytes: number) => void;
   }): Promise<void> {
     const fs = getFs(fsId);
     await _createFileBaseOnOsFileSystemFile({
@@ -283,7 +285,62 @@ export const useFsStore = defineStore('fs', () => {
       uploadedFile,
       folderPath,
       withThumbnail,
+      onProgress,
     });
+  }
+
+  /**
+   * Uploads files from the OS one by one: a failed file does not stop the others.
+   * Failed files are reported by one notice. Returns the number of uploaded files.
+   */
+  async function uploadOsFiles({
+    fsId,
+    files,
+    folderPath,
+    withThumbnail,
+    onProgress,
+  }: {
+    fsId: string;
+    files: File[];
+    folderPath: string;
+    withThumbnail?: boolean;
+    /** Reports the written bytes of the file at `fileIndex` in `files`. */
+    onProgress?: (fileIndex: number, bytesWritten: number) => void;
+  }): Promise<number> {
+    // the shown folder may have been renamed or removed: nothing is written by its old path
+    if (formatPath(folderPath) && !(await getFs(fsId).checkFolderPresence(folderPath))) {
+      $createNotice({
+        type: 'error',
+        withIcon: true,
+        content: t('fs.target_folder_missing', { path: folderPath }),
+      });
+      return 0;
+    }
+
+    const failedNames: string[] = [];
+    for (const [fileIndex, uploadedFile] of files.entries()) {
+      try {
+        await saveFileBaseOnOsFileSystemFile({
+          fsId,
+          uploadedFile,
+          folderPath,
+          withThumbnail,
+          onProgress: bytesWritten => onProgress?.(fileIndex, bytesWritten),
+        });
+      } catch (err) {
+        failedNames.push(uploadedFile.name);
+        w3n.log('error', `Error uploading the file '${uploadedFile.name}'. `, err);
+      }
+    }
+
+    if (failedNames.length > 0) {
+      $createNotice({
+        type: 'error',
+        withIcon: true,
+        content: t('fs.upload_error', { names: failedNames.join(', ') }, failedNames.length),
+      });
+    }
+    return files.length - failedNames.length;
   }
 
   async function restoreEntities({ fsId, entities }: { fsId: string; entities: ListingEntryExtended[] }) {
@@ -535,9 +592,6 @@ export const useFsStore = defineStore('fs', () => {
 
   async function initializeFsItems(): Promise<void> {
     trashFolderName.value = await getTrashFolderName();
-    if (!getFsList) {
-      await _initializeFsItems();
-    }
 
     fsList.value = await getFsList();
     fsFolderList.value = await getFsRootFolderList();
@@ -561,6 +615,7 @@ export const useFsStore = defineStore('fs', () => {
     getFolderContentList,
     getFolderContentFilledList,
     saveFileBaseOnOsFileSystemFile,
+    uploadOsFiles,
     renameEntity,
     deleteEntities,
     restoreEntities,

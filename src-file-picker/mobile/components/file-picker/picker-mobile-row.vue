@@ -128,22 +128,26 @@
       background-color: var(--color-bg-control-primary-hover);
     }
   }
+
   .main {
     flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
   }
+
   .name {
     font-size: var(--font-13);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
   .size {
     font-size: var(--font-11);
     color: var(--color-text-control-secondary-default);
   }
+
   .date {
     flex-shrink: 0;
     font-size: var(--font-11);

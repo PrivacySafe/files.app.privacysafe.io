@@ -26,7 +26,9 @@
     }
     if (isSaveMode.value) {
       const name = picker.saveName.value;
-      return name ? `${t('file_picker.footer.save_as')} ${name}` : t('file_picker.header.save_file');
+      return name
+        ? `${t('file_picker.footer.save_as')} ${name}`
+        : dialogRequest?.title || t('file_picker.header.save_file');
     }
 
     const count = props.selectedRows.length;
@@ -43,7 +45,7 @@
     if (count === 1) {
       return props.selectedRows[0].name || fallbackTitle;
     }
-    return `${count} ${t('file_picker.selected_items')}`;
+    return t('file_picker.selected_items', { count }, count);
   });
 
   async function openRenameDialog() {
@@ -58,6 +60,7 @@
         : defineAsyncComponent(() => import('@picker/mobile/dialogs/picker-mobile-rename-dialog.vue'));
       const result = await dialogs.$openDialog(component, {
         data: isFolder ? { name: picker.saveName.value, allowEmpty: true } : picker.saveName.value,
+        strictNames: picker.strictNames.value,
         dialogProps: {
           title: t(isFolder ? 'file_picker.folder_name' : 'dialog.file_exist.button.rename'),
           cssStyle: { maxHeight: '95%' },
@@ -112,6 +115,7 @@
     padding: 10px 12px;
     border-bottom: 1px solid var(--color-border-block-primary-default);
   }
+
   .title {
     flex: 1;
     margin: 0;
@@ -123,10 +127,12 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
   .spacer {
     width: 32px;
     flex-shrink: 0;
   }
+
   .pencil {
     cursor: pointer;
     flex-shrink: 0;

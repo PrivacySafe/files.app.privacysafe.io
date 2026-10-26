@@ -12,6 +12,7 @@ module.exports = {
     'no-descending-specificity': null,
     'color-function-notation': null,
     'selector-class-pattern': null,
+    'scss/load-no-partial-leading-underscore': null,
     'alpha-value-notation': 'number',
     'import-notation': 'string',
     'media-feature-name-no-unknown': [

@@ -14,7 +14,7 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 import { defineStore } from 'pinia';
 import cloneDeep from 'lodash/cloneDeep';
 import hasIn from 'lodash/hasIn';
@@ -28,6 +28,7 @@ import type {
   StorageAppSettings,
   StorageAppConfig,
 } from '@shared/types';
+import { getOperatingSystem, type OperatingSystem } from '@shared/utils/operating-system';
 import { blobFromDataURL } from '@/utils/image-files';
 import { APP_SETTINGS_DEFAULT } from '@shared/constants';
 import { appStorageSrv } from '@/services/services-provider';
@@ -43,13 +44,10 @@ export const useAppStore = defineStore('app', () => {
     width: 0,
     height: 0,
   });
-  // @ts-ignore
-  const operatingSystem = ref<'macos' | 'linux' | 'windows'>(navigator.userAgentData?.platform.toLowerCase());
+  const operatingSystem = ref<OperatingSystem>(getOperatingSystem());
 
   const appStorageSettings = ref<StorageAppSettings>(cloneDeep(APP_SETTINGS_DEFAULT));
   const commonLoading = ref<boolean>(false);
-
-  const trashFolderName = computed(() => `.trash-folder-${user.value || ''}`);
 
   async function getAppVersion() {
     const v = await w3n.myVersion();
@@ -95,6 +93,11 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function setCustomLogo(dataURL: AppConfig['customLogo']): Promise<void> {
+    // the previous logo's object URL keeps its blob in memory until revoked
+    if (customLogoSrc.value) {
+      URL.revokeObjectURL(customLogoSrc.value);
+    }
+
     if (dataURL) {
       try {
         const imgBlob = blobFromDataURL(dataURL);
@@ -146,7 +149,7 @@ export const useAppStore = defineStore('app', () => {
 
     return {
       ...appStorageSettings.value,
-      trashFolderName: data!.trashFolderName,
+      trashFolderName: data?.trashFolderName ?? '',
     };
   }
 
@@ -169,7 +172,6 @@ export const useAppStore = defineStore('app', () => {
     appWindowSize,
     appStorageSettings,
     commonLoading,
-    trashFolderName,
     getAppVersion,
     getConnectivityStatus,
     getUser,

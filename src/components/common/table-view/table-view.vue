@@ -70,13 +70,14 @@
   } = useNavigation();
 
   const appStore = useAppStore();
-  const { commonLoading, trashFolderName } = storeToRefs(appStore);
+  const { commonLoading } = storeToRefs(appStore);
   const { setCommonLoading } = appStore;
 
-  const { downloadEntities, restoreEntities } = useFsStore();
+  const fsStore = useFsStore();
+  const { downloadEntities, restoreEntities } = fsStore;
 
   const runModeInfoStore = useRunModeInfoStore();
-  const { isDragging, isMoveMode, isMoveModeQuick } = storeToRefs(runModeInfoStore);
+  const { isDragging, isMoveMode, isMoveModeQuickForSelection, moveModeWindow } = storeToRefs(runModeInfoStore);
   const { toggleCopyMoveMode, deleteSelectedEntities } = runModeInfoStore;
 
   const tableComponent = ref<Nullable<Ui3nTableExpose<ListingEntryExtended>>>(null);
@@ -139,7 +140,16 @@
       case 'copy/move':
         break;
       case 'delete': {
-        await deleteSelectedEntities({ fsId: tableFsId.value, entities, completely: false });
+        try {
+          await deleteSelectedEntities({ fsId: tableFsId.value, entities, completely: false });
+        } catch (err) {
+          w3n.log('error', 'Error moving the selected objects to the trash. ', err);
+          notifications.$createNotice({
+            type: 'error',
+            withIcon: true,
+            content: t('fs.entity.message.error.delete', { count: entities.length }),
+          });
+        }
         break;
       }
 
@@ -185,8 +195,7 @@
         try {
           restoredParentFoldersLists = await restoreEntities({ fsId: tableFsId.value, entities });
           if (size(restoredParentFoldersLists) > 0) {
-            console.log('💥 SYNC AFTER RESTORE ENTITIES 💥');
-            bus.$emitter.emit('refresh:data', { path: trashFolderName.value });
+            bus.$emitter.emit('refresh:data', { path: fsStore.trashFolderName ?? '' });
             for (const restoredParentFolder of restoredParentFoldersLists!) {
               bus.$emitter.emit('refresh:data', { path: restoredParentFolder });
             }
@@ -256,7 +265,7 @@
         :window-index="windowIndex"
         :base-path="{
           fullPath: [USER_TRASH_FOLDER, USER_TRASH_LOCAL_FOLDER].includes(tableRootFolderId)
-            ? trashFolderName
+            ? (fsStore.trashFolderName ?? '')
             : '',
           title: '',
         }"
@@ -284,11 +293,11 @@
             :window-index="windowIndex"
             :is-in-split-mode="isSplittedMode"
             :selected-entities="selectedRows"
-            :is-move-mode="isMoveMode"
-            :is-move-mode-quick="isMoveModeQuick"
+            :is-move-mode="isMoveMode && moveModeWindow === `${windowIndex}`"
+            :is-move-mode-quick="isMoveModeQuickForSelection"
             :disabled="commonLoading"
             @action="handleBulkActions($event, selectedRows)"
-            @update:move-mode="toggleCopyMoveMode"
+            @update:move-mode="toggleCopyMoveMode($event, windowIndex)"
           />
         </template>
       </fs-table>

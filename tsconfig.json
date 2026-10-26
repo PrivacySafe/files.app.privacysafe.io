@@ -29,6 +29,6 @@
       "@picker/*": ["./src-file-picker/*"]
     }
   },
-  "include": ["vite.config.ts", "src/**/*", "shared/**/*", "@types/**/*", "src-file-picker/**/*"],
+  "include": ["vite.config.ts", "vitest.config.ts", "src/**/*", "shared/**/*", "@types/**/*", "src-file-picker/**/*", "tests/**/*"],
   "exclude": ["public", "app", "node_modules/.deno"]
 }

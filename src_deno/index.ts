@@ -15,12 +15,12 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 /// <reference path="../@types/platform-defs/injected-w3n.d.ts" />
-// @deno-types="../../shared-libs/ipc/ipc-service.d.ts"
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { setupGlobalReportingOfUnhandledErrors } from '../shared/utils/error-handling.ts';
 import { ObserversSet } from '../shared/utils/observer-utils.ts';
 import type { ListingEntryExtended, StorageEvent } from '../shared/types/index.ts';
-import type { StorageAppDenoService } from './types.ts';
+import { PICKER_SERVICE_METHODS, type PickerServiceMethod, type StorageAppDenoService } from './types.ts';
+// @deno-types="../shared/utils/ipc/ipc-service.d.ts"
 import { MultiConnectionIPCWrap } from '../shared/utils/ipc/ipc-service.js';
 import { sleep } from '../shared/utils/processes/sleep.ts';
 import { preInitialCleanProcedure } from './utils/pre-initial-clean-procedure.ts';
@@ -31,7 +31,14 @@ import { favoritesService } from './services/favorites.service.ts';
 import { fsService } from './services/fs.service.ts';
 import { syncService } from './services/sync.service.ts';
 import { USER_FS } from '../shared/constants/index.ts';
-import { getEntityNameAndParent } from '../shared/utils/fs-utils/index.ts';
+import {
+  getEntityNameAndParent,
+  isSafeRelativePath,
+  isSameOrInside,
+  isValidEntityName,
+} from '../shared/utils/fs-utils/index.ts';
+import { filterRpcWritableXAttrs } from './services/fs-service.utils/listing-xattrs.ts';
+import { PartialDeleteError } from './services/fs-service.utils/delete-fs-entities.ts';
 
 async function storageAppDenoService(): Promise<StorageAppDenoService> {
   setupGlobalReportingOfUnhandledErrors(true);
@@ -51,35 +58,30 @@ async function storageAppDenoService(): Promise<StorageAppDenoService> {
     return () => updateEventsObservers.delete(obs);
   }
 
-  console.log('Inside storageAppDenoService p 1');
-
   const { getFsItem, getFsList, getFsRootFolderList, initializeFsItems } =
     await prepareFsListAndFsRootFolderList();
 
-  console.log('Inside storageAppDenoService p 2');
-
   const favoritesSrv = await favoritesService({ appSyncedFs, emitStorageEvent });
-
-  console.log('Inside storageAppDenoService p 3');
 
   const fsSyncSrv = await syncService({ appLocalFs, userSyncedFs, emitStorageEvent });
 
-  console.log('Inside storageAppDenoService p 4');
-
   const fsSrv = fsService({ getFsItem, favoritesSrv, trashFolderName, emitStorageEvent });
 
-  console.log('Inside storageAppDenoService p 5');
+  /** Puts a changed entity of the user synced storage into the sync queue. */
+  function enqueueForSync(path: string) {
+    return fsSyncSrv.addSyncQueueItem({
+      path: formatPath(path),
+      status: 'pending',
+      attempts: 0,
+      lastError: '',
+      lastChanged: Date.now(),
+    });
+  }
 
   async function setFolderAsFavorite({ fsId, fullPath }: { fsId: string; fullPath: string }) {
     const updatedFavorites = await fsSrv.setFolderAsFavorite({ fsId, fullPath });
     if (updatedFavorites && fsId === USER_FS) {
-      await fsSyncSrv.addSyncQueueItem({
-        path: fullPath,
-        status: 'pending',
-        attempts: 0,
-        lastError: '',
-        lastChanged: Date.now(),
-      });
+      await enqueueForSync(fullPath);
     }
 
     return updatedFavorites;
@@ -88,13 +90,7 @@ async function storageAppDenoService(): Promise<StorageAppDenoService> {
   async function unsetFolderAsFavorite({ fsId, id, fullPath }: { fsId: string; id: string; fullPath: string }) {
     const updatedFavorites = await fsSrv.unsetFolderAsFavorite({ fsId, id, fullPath });
     if (updatedFavorites && fsId === USER_FS) {
-      await fsSyncSrv.addSyncQueueItem({
-        path: fullPath,
-        status: 'pending',
-        attempts: 0,
-        lastError: '',
-        lastChanged: Date.now(),
-      });
+      await enqueueForSync(fullPath);
     }
 
     return updatedFavorites;
@@ -109,15 +105,18 @@ async function storageAppDenoService(): Promise<StorageAppDenoService> {
     path: string;
     attrs: Record<string, any | undefined>;
   }) {
-    await fsSrv.updateEntityXAttrs({ fsId, path, attrs });
+    // attributes the GUI may set; the others (favorites, trash data) are set by the service itself
+    const { allowed, rejected } = filterRpcWritableXAttrs(attrs);
+    if (rejected.length > 0) {
+      await w3n.log('error', `Refused to set the attributes (${rejected.join(', ')}): not allowed or invalid. `);
+    }
+    if (Object.keys(allowed).length === 0) {
+      return;
+    }
+
+    await fsSrv.updateEntityXAttrs({ fsId, path, attrs: allowed });
     if (fsId === USER_FS) {
-      await fsSyncSrv.addSyncQueueItem({
-        path,
-        status: 'pending',
-        attempts: 0,
-        lastError: '',
-        lastChanged: Date.now(),
-      });
+      await enqueueForSync(path);
     }
   }
 
@@ -132,26 +131,54 @@ async function storageAppDenoService(): Promise<StorageAppDenoService> {
   }) {
     await fsSrv.deleteEntityXAttrs({ fsId, path, attrNames });
     if (fsId === USER_FS) {
-      await fsSyncSrv.addSyncQueueItem({
-        path,
-        status: 'pending',
-        attempts: 0,
-        lastError: '',
-        lastChanged: Date.now(),
-      });
+      await enqueueForSync(path);
+    }
+  }
+
+  /*
+   Names and paths come from the GUI and the file pickers, so they are checked
+   here: the FS utils below build paths by plain string joins.
+  */
+  function assertValidName(name: unknown): asserts name is string {
+    if (!isValidEntityName(name)) {
+      throw new Error(`Invalid name: it must not be empty, '.', '..' or contain '/' or '\\'.`);
+    }
+  }
+
+  function assertSafePath(path: unknown): asserts path is string {
+    if (typeof path !== 'string' || !isSafeRelativePath(formatPath(path))) {
+      throw new Error(`Invalid path: it must not contain '.', '..' or empty segments.`);
+    }
+  }
+
+  function assertTargetOutsideOfEntities({
+    fsId,
+    entities,
+    targetFsId,
+    targetFolder,
+  }: {
+    fsId: string;
+    entities: Pick<ListingEntryExtended, 'fullPath' | 'type'>[];
+    targetFsId: string;
+    targetFolder: string;
+  }) {
+    assertSafePath(targetFolder);
+    if (fsId !== targetFsId) {
+      return;
+    }
+    const target = formatPath(targetFolder);
+    for (const entity of entities) {
+      if (entity.type === 'folder' && isSameOrInside(target, formatPath(entity.fullPath))) {
+        throw new Error('A folder cannot be copied or moved into itself.');
+      }
     }
   }
 
   async function makeFolder({ fsId, path }: { fsId: string; path: string }) {
+    assertSafePath(path);
     const folderId = await fsSrv.makeFolder({ fsId, path });
     if (fsId === USER_FS) {
-      await fsSyncSrv.addSyncQueueItem({
-        path: formatPath(path),
-        status: 'pending',
-        attempts: 0,
-        lastError: '',
-        lastChanged: Date.now(),
-      });
+      await enqueueForSync(path);
     }
 
     return folderId;
@@ -168,27 +195,16 @@ async function storageAppDenoService(): Promise<StorageAppDenoService> {
     targetFsId: string;
     targetFolder: string;
   }) {
+    assertTargetOutsideOfEntities({ fsId, entities, targetFsId, targetFolder });
     const res = await fsSrv.copyEntities({ fsId, entities, targetFsId, targetFolder });
     if (targetFsId === USER_FS) {
       for (const item of res) {
         if (item.status === 'fulfilled' && item.value) {
-          await fsSyncSrv.addSyncQueueItem({
-            path: formatPath(item.value),
-            status: 'pending',
-            attempts: 0,
-            lastError: '',
-            lastChanged: Date.now(),
-          });
+          await enqueueForSync(item.value);
         }
       }
 
-      await fsSyncSrv.addSyncQueueItem({
-        path: formatPath(targetFolder),
-        status: 'pending',
-        attempts: 0,
-        lastError: '',
-        lastChanged: Date.now(),
-      });
+      await enqueueForSync(targetFolder);
     }
 
     return res;
@@ -206,38 +222,22 @@ async function storageAppDenoService(): Promise<StorageAppDenoService> {
     newPath: string;
   }) {
     const newFsObjStatus =
-      fsId === USER_FS ? await fsSrv.getSyncedStatus({ fsId: targetFsId, fullPath: newPath }) : undefined;
+      targetFsId === USER_FS ? await fsSrv.getSyncedStatus({ fsId: targetFsId, fullPath: newPath }) : undefined;
 
     if (newFsObjStatus && ['unsynced', 'behind'].includes(newFsObjStatus.state)) {
-      await fsSyncSrv.addSyncQueueItem({
-        path: newPath,
-        status: 'pending',
-        attempts: 0,
-        lastError: '',
-        lastChanged: Date.now(),
-      });
+      await enqueueForSync(newPath);
     }
 
+    const sourceParentFolderPath = formatPath(getParentFolderPathFromEntityFullPath(oldPath));
     if (fsId === USER_FS) {
-      const sourceParentFolderPath = formatPath(getParentFolderPathFromEntityFullPath(oldPath));
-      await fsSyncSrv.addSyncQueueItem({
-        path: sourceParentFolderPath,
-        status: 'pending',
-        attempts: 0,
-        lastError: '',
-        lastChanged: Date.now(),
-      });
+      await enqueueForSync(sourceParentFolderPath);
     }
 
-    if (targetFsId === USER_FS && fsId !== USER_FS) {
-      const targetFolder = formatPath(getParentFolderPathFromEntityFullPath(newPath));
-      await fsSyncSrv.addSyncQueueItem({
-        path: targetFolder,
-        status: 'pending',
-        attempts: 0,
-        lastError: '',
-        lastChanged: Date.now(),
-      });
+    // a move inside the synced FS does not change the moved object itself, only the entries
+    // of the source and target folders, so the target folder is always queued
+    const targetFolder = formatPath(getParentFolderPathFromEntityFullPath(newPath));
+    if (targetFsId === USER_FS && !(fsId === USER_FS && targetFolder === sourceParentFolderPath)) {
+      await enqueueForSync(targetFolder);
     }
   }
 
@@ -252,6 +252,13 @@ async function storageAppDenoService(): Promise<StorageAppDenoService> {
     targetFsId: string;
     newPath: string;
   }) {
+    assertSafePath(newPath);
+    assertTargetOutsideOfEntities({
+      fsId,
+      entities: [entity],
+      targetFsId,
+      targetFolder: getParentFolderPathFromEntityFullPath(formatPath(newPath)),
+    });
     const dstFullPath = await fsSrv.moveEntity({ fsId, entity, targetFsId, newPath });
     await actionAfterMovingEntity({ fsId, oldPath: entity.fullPath, targetFsId, newPath: dstFullPath });
     return dstFullPath;
@@ -272,38 +279,29 @@ async function storageAppDenoService(): Promise<StorageAppDenoService> {
       const newFsObjStatus =
         targetFsId === USER_FS ? await fsSrv.getSyncedStatus({ fsId: targetFsId, fullPath: newPath }) : undefined;
       if (newFsObjStatus && ['unsynced', 'behind'].includes(newFsObjStatus.state)) {
-        await fsSyncSrv.addSyncQueueItem({
-          path: newPath,
-          status: 'pending',
-          attempts: 0,
-          lastError: '',
-          lastChanged: Date.now(),
-        });
+        await enqueueForSync(newPath);
       }
     }
 
-    if (fsId === USER_FS) {
-      const { fullPath } = entities[0];
-      const sourceParentFolderPath = formatPath(getParentFolderPathFromEntityFullPath(fullPath));
-      await fsSyncSrv.addSyncQueueItem({
-        path: sourceParentFolderPath,
-        status: 'pending',
-        attempts: 0,
-        lastError: '',
-        lastChanged: Date.now(),
-      });
+    const sourceFolders = new Set(
+      fsId === USER_FS
+        ? entities.map(({ fullPath }) => formatPath(getParentFolderPathFromEntityFullPath(fullPath)))
+        : [],
+    );
+    for (const sourceFolder of sourceFolders) {
+      await enqueueForSync(sourceFolder);
     }
 
-    if (targetFsId === USER_FS && fsId !== USER_FS) {
-      for (const newPath of newPaths) {
-        const targetFolder = formatPath(getParentFolderPathFromEntityFullPath(newPath));
-        await fsSyncSrv.addSyncQueueItem({
-          path: targetFolder,
-          status: 'pending',
-          attempts: 0,
-          lastError: '',
-          lastChanged: Date.now(),
-        });
+    // a move inside the synced FS does not change the moved objects themselves, only the entries
+    // of the source and target folders, so the target folders are always queued
+    if (targetFsId === USER_FS) {
+      const targetFolders = new Set(
+        newPaths.map(newPath => formatPath(getParentFolderPathFromEntityFullPath(newPath))),
+      );
+      for (const targetFolder of targetFolders) {
+        if (!sourceFolders.has(targetFolder)) {
+          await enqueueForSync(targetFolder);
+        }
       }
     }
   }
@@ -319,6 +317,7 @@ async function storageAppDenoService(): Promise<StorageAppDenoService> {
     targetFsId: string;
     targetFolder: string;
   }) {
+    assertTargetOutsideOfEntities({ fsId, entities, targetFsId, targetFolder });
     const pathsMap = await fsSrv.moveEntities({ fsId, entities, targetFsId, targetFolder });
     await actionAfterMovingEntities({ fsId, entities, targetFsId, newPaths: Object.values(pathsMap) });
     return pathsMap;
@@ -346,6 +345,7 @@ async function storageAppDenoService(): Promise<StorageAppDenoService> {
         targetFsId,
         targetFolder: targetPath,
       });
+      return;
     }
 
     await copyEntities({ fsId: sourceFsId, entities, targetFsId, targetFolder: targetPath });
@@ -360,7 +360,11 @@ async function storageAppDenoService(): Promise<StorageAppDenoService> {
     entity: ListingEntryExtended;
     newName: string;
   }) {
-    await moveEntity({ fsId, entity, targetFsId: fsId, newPath: newName });
+    assertValidName(newName);
+    await fsSrv.renameEntity({ fsId, entity, newName });
+    const parentFolderPath = getParentFolderPathFromEntityFullPath(entity.fullPath);
+    const newPath = formatPath(parentFolderPath ? `${parentFolderPath}/${newName}` : newName);
+    await actionAfterMovingEntity({ fsId, oldPath: entity.fullPath, targetFsId: fsId, newPath });
   }
 
   async function deleteEntities({
@@ -372,56 +376,88 @@ async function storageAppDenoService(): Promise<StorageAppDenoService> {
     entities: Pick<ListingEntryExtended, 'fullPath' | 'type' | 'name'>[];
     completely?: boolean;
   }) {
-    const mappingEntitiesPathsToNewPaths = await fsSrv.deleteEntities({ fsId, entities, completely });
-
-    if (fsId !== USER_FS) {
-      return;
-    }
-
-    if (completely) {
-      const parentFolderPath = formatPath(getParentFolderPathFromEntityFullPath(entities[0].fullPath));
-      await fsSyncSrv.addSyncQueueItem({
-        path: parentFolderPath,
-        status: 'pending',
-        attempts: 0,
-        lastError: '',
-        lastChanged: Date.now(),
-      });
-
-      for (const entity of entities) {
-        if (entity.type === 'folder') {
-          await fsSyncSrv.clearSubtreeFromQueue(formatPath(entity.fullPath));
-        }
+    let mappingEntitiesPathsToNewPaths: Awaited<ReturnType<typeof fsSrv.deleteEntities>>;
+    let partialFailure: PartialDeleteError | undefined;
+    try {
+      mappingEntitiesPathsToNewPaths = await fsSrv.deleteEntities({ fsId, entities, completely });
+    } catch (err) {
+      if (!(err instanceof PartialDeleteError)) {
+        throw err;
       }
-
-      return;
+      // what was deleted still has to be synced; the failure is reported after that
+      mappingEntitiesPathsToNewPaths = err.result;
+      partialFailure = err;
     }
 
-    if (mappingEntitiesPathsToNewPaths && typeof mappingEntitiesPathsToNewPaths !== 'boolean') {
-      for (const entity of entities) {
-        const pathInTrash = mappingEntitiesPathsToNewPaths[entity.fullPath];
+    if (fsId === USER_FS) {
+      await enqueueDeletedEntities({
+        fsId,
+        entities,
+        completely,
+        result: mappingEntitiesPathsToNewPaths,
+        failedPaths: partialFailure?.failedPaths ?? [],
+        movedBackPaths: partialFailure?.movedBackPaths ?? [],
+      });
+    }
+
+    if (partialFailure) {
+      throw new Error(partialFailure.message);
+    }
+    return mappingEntitiesPathsToNewPaths;
+  }
+
+  async function enqueueDeletedEntities({
+    fsId,
+    entities,
+    completely,
+    result: mappingEntitiesPathsToNewPaths,
+    failedPaths,
+    movedBackPaths,
+  }: {
+    fsId: string;
+    entities: Pick<ListingEntryExtended, 'fullPath' | 'type' | 'name'>[];
+    completely?: boolean;
+    result: Record<string, string> | true | undefined;
+    failedPaths: string[];
+    movedBackPaths: string[];
+  }) {
+    // Removal from the trash is complete even without the flag; the result tells what happened.
+    const isRemovedCompletely = completely || mappingEntitiesPathsToNewPaths === true;
+    const movedToTrash =
+      mappingEntitiesPathsToNewPaths && typeof mappingEntitiesPathsToNewPaths === 'object'
+        ? mappingEntitiesPathsToNewPaths
+        : {};
+    const processedEntities = entities.filter(e =>
+      isRemovedCompletely ? !failedPaths.includes(e.fullPath) : movedToTrash[e.fullPath],
+    );
+
+    // The folders the entities were removed from have changed, and other devices must see it.
+    // An entity moved to the trash and back has changed its folder and the trash as well.
+    const touchedEntities = entities.filter(e => processedEntities.includes(e) || movedBackPaths.includes(e.fullPath));
+    const sourceFolders = new Set(
+      touchedEntities.map(e => formatPath(getParentFolderPathFromEntityFullPath(e.fullPath))),
+    );
+    for (const folder of sourceFolders) {
+      await enqueueForSync(folder);
+    }
+
+    for (const entity of processedEntities) {
+      if (entity.type === 'folder') {
+        await fsSyncSrv.clearSubtreeFromQueue(formatPath(entity.fullPath));
+      }
+    }
+
+    if (!isRemovedCompletely && touchedEntities.length > 0) {
+      for (const entity of processedEntities) {
+        const pathInTrash = movedToTrash[entity.fullPath];
         const newFsObjStatus = await fsSrv.getSyncedStatus({ fsId, fullPath: pathInTrash });
         if (newFsObjStatus && ['unsynced', 'behind'].includes(newFsObjStatus.state)) {
-          await fsSyncSrv.addSyncQueueItem({
-            path: pathInTrash,
-            status: 'pending',
-            attempts: 0,
-            lastError: '',
-            lastChanged: Date.now(),
-          });
+          await enqueueForSync(pathInTrash);
         }
       }
 
-      await fsSyncSrv.addSyncQueueItem({
-        path: trashFolderName,
-        status: 'pending',
-        attempts: 0,
-        lastError: '',
-        lastChanged: Date.now(),
-      });
+      await enqueueForSync(trashFolderName);
     }
-
-    return mappingEntitiesPathsToNewPaths;
   }
 
   async function restoreEntities({
@@ -439,25 +475,13 @@ async function storageAppDenoService(): Promise<StorageAppDenoService> {
       return undefined;
     }
 
-    await fsSyncSrv.addSyncQueueItem({
-      path: trashFolderName,
-      status: 'pending',
-      attempts: 0,
-      lastError: '',
-      lastChanged: Date.now(),
-    });
+    await enqueueForSync(trashFolderName);
 
     const restoredParentFolders = new Set<string>();
     for (const restoredPath of Object.values(mappingPathToRestorePath)) {
       const { parentFolder } = getEntityNameAndParent(restoredPath);
       if (!restoredParentFolders.has(parentFolder)) {
-        await fsSyncSrv.addSyncQueueItem({
-          path: parentFolder,
-          status: 'pending',
-          attempts: 0,
-          lastError: '',
-          lastChanged: Date.now(),
-        });
+        await enqueueForSync(parentFolder);
         restoredParentFolders.add(parentFolder);
       }
     }
@@ -471,7 +495,6 @@ async function storageAppDenoService(): Promise<StorageAppDenoService> {
       payload: { favorites },
     });
   });
-  console.log('Inside storageAppDenoService p end');
   return {
     getTrashFolderName,
     loadConfigFile,
@@ -512,7 +535,6 @@ async function storageAppDenoService(): Promise<StorageAppDenoService> {
 
 storageAppDenoService()
   .then(async srv => {
-    console.log('[###] DENO SERVICE 00000 [###]');
     const srvWrapInternal = new MultiConnectionIPCWrap('AppStorageInternal');
 
     srvWrapInternal.exposeReqReplyMethods<Omit<StorageAppDenoService, 'watchEvent'>>(srv, [
@@ -565,6 +587,14 @@ storageAppDenoService()
     ]);
     srvWrapInternal.exposeObservableMethods<Pick<StorageAppDenoService, 'watchEvent'>>(srv, ['watchEvent']);
     srvWrapInternal.startIPC();
+
+    // The file pickers run as dialogs of other apps, so they get a separate
+    // service with the read-only methods they need (see manifest.json).
+    const srvWrapPicker = new MultiConnectionIPCWrap('AppStoragePicker');
+    srvWrapPicker.exposeReqReplyMethods<Pick<StorageAppDenoService, PickerServiceMethod>>(srv, [
+      ...PICKER_SERVICE_METHODS,
+    ]);
+    srvWrapPicker.startIPC();
 
     console.log('# DENO SERVICE FOR THE STORAGE APP HAS BEEN LAUNCHED #');
   })

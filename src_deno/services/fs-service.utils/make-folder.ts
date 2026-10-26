@@ -14,7 +14,7 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import { randomStr } from '../../../src/utils/random.ts';
+import { randomStr } from '../../../shared/utils/random.ts';
 import { makeFolder } from '../../../shared/utils/fs-utils/index.ts';
 import { updateXAttrs } from './actions-on-x-attrs.ts';
 import { USER_FS, USER_LOCAL_FS } from '../../../shared/constants/index.ts';

@@ -28,7 +28,7 @@ export async function saveFolder({
   stopErrorPropagate?: boolean;
 }): Promise<void> {
   try {
-    return fs.saveFolder(folder, dst, mergeAndOverwrite);
+    return await fs.saveFolder(folder, dst, mergeAndOverwrite);
   } catch (err) {
     console.log(
       `🔥 [saveFolder] Error saving folder '${dst}' . 'stopErrorPropagate' flag is ${stopErrorPropagate} .`,

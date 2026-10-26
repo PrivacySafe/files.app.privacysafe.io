@@ -17,6 +17,7 @@
 /// <reference path="../../../@types/platform-defs/injected-w3n.d.ts" />
 import type { StorageEvent } from '../../../shared/types/index.ts';
 import { executeFunc } from '../../../shared/utils/execute-function.ts';
+import { formatPath } from '../../../shared/utils/various.ts';
 
 export async function syncDownload({
   fs,
@@ -31,26 +32,27 @@ export async function syncDownload({
   emitEvent: (event: StorageEvent) => void;
   stopErrorPropagate?: boolean;
 }): Promise<{ downloadTaskId: number } | undefined> {
-  console.log(`[###] DOWNLOAD PROCESSING START FOR '${path}' [###]`);
   return executeFunc({
     fn: fs.v!.sync!.startDownload.bind(fs.v!.sync),
     fnArgs: [path, version],
+    // the call only schedules a download, and a repeated call returns the same task,
+    // so a slow server must not make it fail by a timeout
+    timeoutValue: 0,
     retryCount: 2,
     defaultValue: undefined,
     doesErrorPropagateStop: stopErrorPropagate,
     actionIfError: err => {
       console.error(`🔥 DOWNLOAD PROCESSING ERROR FOR '${path}'. `, err);
 
-      const { path: errPath } = err as web3n.files.FSSyncException;
       emitEvent({
         event: 'download:end',
-        payload: { path: errPath ? errPath.replace('./', '') : 'root' },
+        payload: { path: formatPath(path) },
       });
       emitEvent({
         event: 'sync:error',
         payload: {
-          path: errPath.replace('./', ''),
-          message: (err as web3n.files.FSSyncException).message || JSON.stringify(err),
+          path: formatPath(path),
+          message: (err as web3n.files.FSSyncException)?.message || JSON.stringify(err),
         },
       });
     },

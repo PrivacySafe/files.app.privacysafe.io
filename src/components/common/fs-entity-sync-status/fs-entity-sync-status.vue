@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 -->
 <script setup lang="ts">
-  import { computed, type ComputedRef, defineAsyncComponent, inject, ref, watch } from 'vue';
+  import { computed, type ComputedRef, defineAsyncComponent, inject, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { storeToRefs } from 'pinia';
   import { Ui3nButton, Ui3nIcon, type Nullable, type TaskRunnerInstance } from '@v1nt1248/3nclient-lib';
@@ -83,14 +83,17 @@
       return;
     }
 
-    upsertProcess({ action: 'adoptRemote', path: path.value, value: true });
+    const adoptedPath = path.value;
+    upsertProcess({ action: 'adoptRemote', path: adoptedPath, value: true });
     appStorageSrv
       .startSyncAdopt({
-        path: path.value,
+        path: adoptedPath,
         opts: { remoteVersion: fsEntitySyncStatus.value.remote.latest },
       })
-      .then(() => {
-        removeProcess({ action: 'adoptRemote', path: path.value });
+      .catch(err => w3n.log('error', `Error adopting the remote version of '${adoptedPath}'. `, err))
+      .finally(() => {
+        // without this the progress indicator of the row stays forever after a failure
+        removeProcess({ action: 'adoptRemote', path: adoptedPath });
       });
   }
 
@@ -130,7 +133,6 @@
     });
 
     if (res) {
-      console.log('[###] CONFLICT RESOLVING RES => ', JSON.stringify(res), ' <> ', props.row.fullPath);
       const { event, data } = res;
       if (event === 'confirm') {
         emits('refresh-data');
@@ -140,10 +142,18 @@
     }
   }
 
+  let offlineRetryTimer: ReturnType<typeof setTimeout> | undefined;
+
   async function getSyncStatus() {
-    // console.log(`# GET SYNC STATUS FOR [${path.value}] | FS_ID ${props.fsId} | CONNECTIVITY ${appStore.connectivityStatus}`);
+    if (offlineRetryTimer) {
+      clearTimeout(offlineRetryTimer);
+      offlineRetryTimer = undefined;
+    }
+
     if (appStore.connectivityStatus === 'offline') {
-      setTimeout(() => {
+      // one pending retry per row; it is cleared when the row is unmounted
+      offlineRetryTimer = setTimeout(() => {
+        offlineRetryTimer = undefined;
         getSyncStatus();
       }, 60000);
       return;
@@ -178,6 +188,12 @@
     }
   }
 
+  onBeforeUnmount(() => {
+    if (offlineRetryTimer) {
+      clearTimeout(offlineRetryTimer);
+    }
+  });
+
   watch(
     [() => props.lockChanges, () => isFsEntryInProcessing.value],
     ([lcVal, processFlagVal]) => {
@@ -202,7 +218,7 @@
       />
 
       <span :style="textStyle">
-        {{ currentSyncStatus }}
+        {{ currentSyncStatus && t(`fs.sync_state.${currentSyncStatus}`) }}
       </span>
 
       <div

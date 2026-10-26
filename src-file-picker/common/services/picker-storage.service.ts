@@ -1,17 +1,16 @@
 import { makeServiceCaller } from '@shared/utils/ipc/ipc-service-caller';
-import type { StorageAppDenoService } from '@deno/types';
+import { PICKER_SERVICE_METHODS, type PickerServiceMethod, type StorageAppDenoService } from '@deno/types';
 
-export let pickerStorageSrv: StorageAppDenoService;
+export let pickerStorageSrv: Pick<StorageAppDenoService, PickerServiceMethod>;
 
 /**
- * Connect only the AppStorageInternal methods required by the picker.
- * This avoids bootstrapping the main Storage application's full RPC surface.
+ * Connects to 'AppStoragePicker': the service with only the read-only methods
+ * the picker needs. Pickers run as dialogs of other apps and have no access to
+ * the main AppStorageInternal service.
  */
 export async function initializePickerStorageService(): Promise<void> {
-  const srvConnection = await w3n.rpc!.thisApp!('AppStorageInternal');
-  pickerStorageSrv = makeServiceCaller<StorageAppDenoService>(srvConnection, [
-    'getFsList',
-    'getFsRootFolderList',
-    'getFolderContentFilledList',
-  ]) as StorageAppDenoService;
+  const srvConnection = await w3n.rpc!.thisApp!('AppStoragePicker');
+  pickerStorageSrv = makeServiceCaller<Pick<StorageAppDenoService, PickerServiceMethod>>(srvConnection, [
+    ...PICKER_SERVICE_METHODS,
+  ]) as Pick<StorageAppDenoService, PickerServiceMethod>;
 }

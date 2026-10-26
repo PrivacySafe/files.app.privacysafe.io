@@ -24,7 +24,6 @@ import {
   ref,
 } from 'vue';
 import { useI18n } from 'vue-i18n';
-import isEmpty from 'lodash/isEmpty';
 import size from 'lodash/size';
 import {
   DIALOGS_KEY,
@@ -38,6 +37,7 @@ import { useNavigation } from '@/composables/useNavigation';
 import { useFsWindowState } from '@/composables/useFsWindowState';
 import { useSort } from '@/composables/useSort';
 import { useAppStore, useFsStore, useRunModeInfoStore } from '@/store';
+import { isValidEntityName } from '@shared/utils/fs-utils/entity-name';
 import { type AppGlobalEvents, FsFolderEntityEvent, ListingEntryExtended } from '@shared/types';
 import type { FsTableBulkActionName } from '@/components/common/fs-table-bulk-actions/types';
 
@@ -48,6 +48,7 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
   const notifications = inject<NotificationsPlugin>(NOTIFICATIONS_KEY)!;
 
   const appStore = useAppStore();
+  const fsStore = useFsStore();
   const { setCommonLoading } = appStore;
 
   const runModeInfoStore = useRunModeInfoStore();
@@ -87,7 +88,6 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
   const selectedEntities = ref<ListingEntryExtended[]>([]);
   const showToolbar = ref(false);
 
-  const isNoDataInFolder = computed(() => isEmpty(selectedEntities.value));
 
   async function getFsFolderData(
     window: '1' | '2',
@@ -111,6 +111,11 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
   }
 
   async function loadFolderData() {
+    const getCurrentPath = () =>
+      fsFolderWindow.value === '1' ? window1FolderPath.value : window2FolderPath.value!;
+    const requestedRootFolderId = currentWindowRootFolderId.value;
+    const requestedPath = getCurrentPath();
+
     try {
       setCommonLoading(true);
 
@@ -118,18 +123,27 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
         fsFolderWindow.value,
         currentWindowRootFolderBasePath.value,
       );
-      const currentPath = fsFolderWindow.value === '1' ? window1FolderPath.value : window2FolderPath.value!;
 
-      if (rootFolderId === currentWindowRootFolderId.value && path === currentPath) {
+      if (rootFolderId === currentWindowRootFolderId.value && path === getCurrentPath()) {
         fsFolderData.value = data;
+      }
+    } catch (err) {
+      w3n.log('error', `Error loading the folder '${requestedPath}'. `, err);
+      // Do not leave the previous folder's entities on screen: actions would target them.
+      if (requestedRootFolderId === currentWindowRootFolderId.value && requestedPath === getCurrentPath()) {
+        fsFolderData.value = [];
+        notifications.$createNotice({ type: 'error', withIcon: true, content: t('fs.load_error') });
       }
     } finally {
       setCommonLoading(false);
     }
   }
 
+  // checked for every item on every render: a set keeps it O(1)
+  const selectedIds = computed(() => new Set(selectedEntities.value.map(e => e.id)));
+
   function isEntitySelected(entity: ListingEntryExtended): boolean {
-    return !!selectedEntities.value.find(e => e.id === entity.id!);
+    return selectedIds.value.has(entity.id);
   }
 
   function selectEntity(entity: ListingEntryExtended) {
@@ -170,10 +184,37 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
       }
 
       case 'rename': {
-        if (isTrashFolderInCurrentWindow.value || isSystemFolderInCurrentWindow.value) return;
+        // the name field shows the new name until it is told to revert
+        const { entity, newName, revert } = payload as {
+          entity: ListingEntryExtended;
+          newName: string;
+          revert?: () => void;
+        };
+        if (isTrashFolderInCurrentWindow.value || isSystemFolderInCurrentWindow.value) {
+          revert?.();
+          return;
+        }
 
-        const { entity, newName } = payload as { entity: ListingEntryExtended; newName: string };
-        await renameEntity({ fsId: currentWindowFsId.value as string, entity, newName });
+        if (!isValidEntityName(newName)) {
+          revert?.();
+          notifications.$createNotice({
+            type: 'error',
+            withIcon: true,
+            content: t('validation.text.invalid_name'),
+          });
+          return;
+        }
+        try {
+          await renameEntity({ fsId: currentWindowFsId.value as string, entity, newName });
+        } catch (err) {
+          w3n.log('error', `Error renaming '${entity.fullPath}'. `, err);
+          revert?.();
+          notifications.$createNotice({
+            type: 'error',
+            withIcon: true,
+            content: t('fs.rename_error', { name: entity.name }),
+          });
+        }
         await loadFolderData();
         return;
       }
@@ -182,10 +223,11 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
         if (isTrashFolderInCurrentWindow.value || isSystemFolderInCurrentWindow.value) return;
 
         const { favoriteId, fullPath } = (payload as { entity: ListingEntryExtended }).entity;
-        if (favoriteId) {
-          await unsetFolderAsFavorite({ fsId: currentWindowFsId.value as string, id: favoriteId, fullPath });
-        } else {
-          await setFolderAsFavorite({ fsId: currentWindowFsId.value as string, fullPath });
+        const favFolderList = favoriteId
+          ? await unsetFolderAsFavorite({ fsId: currentWindowFsId.value as string, id: favoriteId, fullPath })
+          : await setFolderAsFavorite({ fsId: currentWindowFsId.value as string, fullPath });
+        if (!favFolderList) {
+          notifications.$createNotice({ type: 'error', withIcon: true, content: t('fs.favorite_error') });
         }
         await loadFolderData();
         return;
@@ -200,7 +242,17 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
   ) {
     switch (action) {
       case 'delete':
-        await deleteSelectedEntities({ fsId: currentWindowFsId.value as string, entities, completely: false });
+        try {
+          await deleteSelectedEntities({ fsId: currentWindowFsId.value as string, entities, completely: false });
+        } catch (err) {
+          w3n.log('error', 'Error moving the selected objects to the trash. ', err);
+          notifications.$createNotice({
+            type: 'error',
+            withIcon: true,
+            content: t('fs.entity.message.error.delete', { count: entities.length }),
+          });
+        }
+        clearSelection();
         break;
 
       case 'delete:completely': {
@@ -219,6 +271,7 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
         if (dialogRes.event === 'confirm') {
           try {
             await deleteSelectedEntities({ fsId: currentWindowFsId.value as string, entities, completely: true });
+            clearSelection();
 
             notifications.$createNotice({
               type: 'info',
@@ -243,6 +296,7 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
         let res;
         try {
           res = await restoreEntities({ fsId: currentWindowFsId.value as string, entities });
+          clearSelection();
           if (size(res) > 0) {
             const entitiesParentFolders = entities.map(e => e.parentFolder);
             const isCurrentProcessedPathParent = entitiesParentFolders.find(
@@ -251,7 +305,7 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
             if (isCurrentProcessedPathParent) {
               bus.$emitter.emit('refresh:data', { path: currentWindowFolderPath.value });
             }
-            bus.$emitter.emit('refresh:data', { path: appStore.trashFolderName });
+            bus.$emitter.emit('refresh:data', { path: fsStore.trashFolderName ?? '' });
 
             notifications.$createNotice({
               type: 'success',
@@ -298,7 +352,6 @@ export function useFsFolder(fsFolderWindow: ComputedRef<'1' | '2'>) {
     fsFolderData,
     selectedEntities,
     showToolbar,
-    isNoDataInFolder,
 
     loadFolderData,
     changeSort,

@@ -28,7 +28,7 @@ export async function updateXAttrs({
   attrs: Record<string, any | undefined>;
 }): Promise<void> {
   try {
-    return fs.updateXAttrs(path, { set: attrs });
+    return await fs.updateXAttrs(path, { set: attrs });
   } catch (err) {
     const attrNames = Object.keys(attrs).join(', ');
     const errorMessage = `🔥 [updateXAttrs] Error update xAttrs (${attrNames}) in the FS object ${path}. `;
@@ -47,7 +47,7 @@ export async function removeXAttrs({
   attrs: string[];
 }): Promise<void> {
   try {
-    return fs.updateXAttrs(path, { remove: attrs });
+    return await fs.updateXAttrs(path, { remove: attrs });
   } catch (err) {
     const errorMessage = `🔥 [removeXAttrs] Error delete xAttrs (${attrs.join(', ')}) in the FS object ${path}. `;
     w3n.log!('error', errorMessage, err);

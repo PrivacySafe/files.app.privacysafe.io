@@ -14,7 +14,7 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
-import { computed, type ComputedRef, ref } from 'vue';
+import { computed, type ComputedRef, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { defineStore, storeToRefs } from 'pinia';
 import isEmpty from 'lodash/isEmpty';
@@ -22,8 +22,16 @@ import size from 'lodash/size';
 import { useNavigation } from '@/composables/useNavigation';
 import { useAppStore, useFsStore } from '@/store';
 import { getEntityNameAndParent } from '@shared/utils/fs-utils';
+import { formatPath } from '@shared/utils/various';
 import type { ListingEntryExtended, RouteDouble, RouteSingle } from '@shared/types';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
+import {
+  type DragKind,
+  type DragSource,
+  getEffectiveMoveMode,
+  isDropIntoItself,
+  shouldResetMoveMode,
+} from '@/utils/drag-and-drop';
 
 export const useRunModeInfoStore = defineStore('run-mode-info', () => {
   const { t } = useI18n();
@@ -45,8 +53,29 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
   const { deleteEntities, copyMoveEntities } = fsStore;
 
   const isDragging = ref(false);
+  /*
+   COPY/MOVE has two sources. `isMoveMode` is the toggle in the toolbar of a window
+   (`moveModeWindow`): it applies to dragging the selection and stays on until that
+   window shows another folder or the other window becomes active. `isMoveModeQuick`
+   is the hot key held while dragging (Alt on macOS, Ctrl otherwise): the only source
+   for a quick drag of an entity that is not selected.
+  */
   const isMoveMode = ref(false);
+  const moveModeWindow = ref<'1' | '2'>('1');
   const isMoveModeQuick = ref(false);
+  const dragKind = ref<Nullable<DragKind>>(null);
+  // the folders being dragged: they can be dropped neither into themselves nor into their subfolders
+  const dragSource = ref<Nullable<DragSource>>(null);
+
+  const effectiveMoveMode = computed(() =>
+    getEffectiveMoveMode({
+      dragKind: dragKind.value,
+      isMoveMode: isMoveMode.value,
+      isMoveModeQuick: isMoveModeQuick.value,
+    }),
+  );
+  // the toggle shows only what the user chose for the selection
+  const isMoveModeQuickForSelection = computed(() => dragKind.value === 'selection' && isMoveModeQuick.value);
 
   const processedPath = computed(() => {
     const { path = '', path2 = '' } = route.query as RouteDouble['query'];
@@ -77,8 +106,47 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
 
   const isCurrentRootFsFolderSystem = computed(() => currentRootFsFolder.value.includes('system-'));
 
-  function toggleCopyMoveMode(val: boolean) {
+  function toggleCopyMoveMode(val: boolean, window: 1 | '1' | 2 | '2' = activeWindow.value || '1') {
     isMoveMode.value = val;
+    moveModeWindow.value = `${window}` as '1' | '2';
+  }
+
+  watch(
+    () => ({
+      folderId: route.params.rootFolderId as string | undefined,
+      path: route.query.path as string | undefined,
+      folder2Id: route.params.rootFolder2Id as string | undefined,
+      path2: route.query.path2 as string | undefined,
+      activeWindow: activeWindow.value,
+    }),
+    (now, before) => {
+      if (
+        isMoveMode.value &&
+        shouldResetMoveMode({ moveModeWindow: moveModeWindow.value, isSplittedMode: isSplittedMode.value, now, before })
+      ) {
+        isMoveMode.value = false;
+      }
+    },
+  );
+
+  /** True when the target is one of the dragged folders or lies inside one of them. */
+  function isDropTargetInsideDragged(targetFsId: Nullable<string>, targetPath: string): boolean {
+    if (!dragSource.value || !targetFsId) {
+      return false;
+    }
+    return isDropIntoItself({
+      targetFsId,
+      targetPath,
+      sourceFsId: dragSource.value.fsId,
+      folderPaths: dragSource.value.folderPaths,
+    });
+  }
+
+  function resetDragState() {
+    isDragging.value = false;
+    isMoveModeQuick.value = false;
+    dragKind.value = null;
+    dragSource.value = null;
   }
 
   async function toggleView() {
@@ -121,19 +189,33 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
     entities: ListingEntryExtended[];
     completely?: boolean;
   }) {
+    if (isEmpty(entities)) {
+      return;
+    }
+
     try {
       setCommonLoading(true);
-      if (!isEmpty(entities)) {
-        await deleteEntities({ fsId, entities, completely });
-        const { parentFolder } = getEntityNameAndParent(entities[0].fullPath);
-        $emitter.emit('refresh:data', { path: parentFolder || '' });
-      }
+      await deleteEntities({ fsId, entities, completely });
     } finally {
+      // refreshed after a partial failure too: some of the entities may have been deleted
+      const { parentFolder } = getEntityNameAndParent(entities[0].fullPath);
+      $emitter.emit('refresh:data', { path: parentFolder || '' });
+      // the trash may be open in the other window
+      const trashFolderName = fsStore.trashFolderName;
+      if (!completely && trashFolderName && parentFolder !== trashFolderName) {
+        $emitter.emit('refresh:data', { path: trashFolderName });
+      }
       setCommonLoading(false);
     }
   }
 
-  async function onDragStart(window: 1 | '1' | 2 | '2') {
+  async function onDragStart(
+    window: 1 | '1' | 2 | '2',
+    kind: DragKind = 'selection',
+    source: Nullable<DragSource> = null,
+  ) {
+    dragKind.value = kind;
+    dragSource.value = source;
     await selectActiveWindow(window);
     isDragging.value = true;
   }
@@ -155,12 +237,21 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
       return;
     }
 
-    const moveMode = isMoveMode.value || isMoveModeQuick.value;
+    const moveMode = effectiveMoveMode.value;
+
+    // an expected case, not a failure: the Deno service would refuse it anyway
+    const draggedFolders = data!.filter(e => e.type === 'folder').map(e => e.fullPath);
+    if (isDropIntoItself({ targetFsId, targetPath: target.fullPath, sourceFsId, folderPaths: draggedFolders })) {
+      $createNotice({
+        type: 'error',
+        withIcon: true,
+        content: t('fs.entity.message.error.into_itself'),
+      });
+      return;
+    }
 
     try {
       setCommonLoading(true);
-      console.log('⭐ IS MOVE MODE => ', moveMode);
-      console.log('⭐ INFO [TARGET] => ', JSON.stringify(target));
 
       await copyMoveEntities({
         sourceFsId: sourceFsId!,
@@ -171,13 +262,11 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
       });
 
       $emitter.emit('drag:end', void 0);
-      $emitter.emit('refresh:data', { path: target.fullPath });
-
-      console.log('⭐ INFO [DATA] => ', JSON.stringify(data));
+      // a drop onto the window area of the root comes with '/', the windows keep the root as ''
+      $emitter.emit('refresh:data', { path: formatPath(target.fullPath) });
 
       if (moveMode && !isEmpty(data)) {
         const { parentFolder: sourceFolder } = getEntityNameAndParent(data![0].fullPath);
-        console.log(`⭐ I'm here ⭐`);
         $emitter.emit('refresh:data', { path: sourceFolder });
       }
 
@@ -191,7 +280,7 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
         content: successMessage,
       });
     } catch (e) {
-      console.error(e);
+      w3n.log('error', `Error ${moveMode ? 'moving' : 'copying'} the dragged objects. `, e);
 
       const errorMessage = moveMode
         ? t('fs.entity.message.error.move', { count: size(data) })
@@ -203,7 +292,7 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
         content: errorMessage,
       });
     } finally {
-      toggleCopyMoveMode(false);
+      // the toggle stays as the user set it (see isMoveMode)
       setCommonLoading(false);
     }
   }
@@ -212,6 +301,13 @@ export const useRunModeInfoStore = defineStore('run-mode-info', () => {
     isDragging,
     isMoveMode,
     isMoveModeQuick,
+    isMoveModeQuickForSelection,
+    moveModeWindow,
+    dragKind,
+    dragSource,
+    effectiveMoveMode,
+    isDropTargetInsideDragged,
+    resetDragState,
     isTileView,
     isSplittedMode,
     activeWindow,

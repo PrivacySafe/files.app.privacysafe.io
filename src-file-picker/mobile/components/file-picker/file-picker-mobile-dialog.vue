@@ -70,6 +70,7 @@
     width: 100%;
     height: 100%;
   }
+
   .content {
     flex: 1;
     min-height: 0;

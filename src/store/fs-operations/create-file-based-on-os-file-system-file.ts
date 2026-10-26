@@ -25,72 +25,85 @@ import {
 import { fileTypeFromBuffer } from 'file-type';
 import type { Nullable } from '@v1nt1248/3nclient-lib';
 import { appStorageSrv } from '@/services/services-provider';
-import { createPdfThumbnail, getFileArray } from '@/utils';
+import { createPdfThumbnail } from '@/utils';
 import { USER_FS, USER_LOCAL_FS } from '@shared/constants';
-import { getFileExtension } from '../../../shared/utils/various';
+import { formatPath } from '@shared/utils/various';
+import { getFolderEntityNames, joinEntityPath, pickFreeEntityName } from '@shared/utils/fs-utils/entity-name';
+import { writeOsFile } from './write-os-file';
+import { THUMBNAIL_SOURCE_SIZE_LIMIT } from '@/constants/thumbnails';
 
-async function createThumbnailForFileFromOs(
-  uploadedFile: File & { path?: string },
-  byteArray: Uint8Array<ArrayBufferLike>,
-): Promise<{ img: Nullable<string>; ext: string; mime: string }> {
-  let fileType = await fileTypeFromBuffer(byteArray);
-  if (!fileType && uploadedFile) {
-    const parsedFileName = uploadedFile.name.split('.');
+// enough for file-type to recognize the format
+const FILE_TYPE_SAMPLE_SIZE = 4100;
 
-    fileType = {
-      mime: uploadedFile.type,
-      ext: (parsedFileName.length > 1 ? parsedFileName.pop() : '') as string,
-    };
+async function detectFileType(file: File): Promise<{ ext: string; mime: string }> {
+  const sample = new Uint8Array(await file.slice(0, FILE_TYPE_SAMPLE_SIZE).arrayBuffer());
+  const detected = await fileTypeFromBuffer(sample);
+  if (detected) {
+    return detected;
   }
 
-  let img: Nullable<string> = null;
-  const isImage = isFileImage({ type: fileType!.mime });
-  const isVideo = isFileVideo({ type: fileType!.mime });
-
-  if (isImage) {
-    const base64Image = byteArray ? uint8ToDataURL(byteArray, fileType!.mime) : '';
-    img = base64Image ? await resizeImage(base64Image, 200) : '';
-  } else if (isVideo) {
-    img = await createVideoThumbnail(uploadedFile, 200, 5);
-  } else if (fileType!.mime === 'application/pdf') {
-    img = await createPdfThumbnail(byteArray!, 200);
-  }
-
-  return { img, ext: fileType!.ext, mime: fileType!.mime };
+  const dotIndex = file.name.lastIndexOf('.');
+  return { ext: dotIndex > 0 ? file.name.slice(dotIndex + 1) : '', mime: file.type };
 }
 
+async function createThumbnailForFileFromOs(file: File, mime: string): Promise<Nullable<string>> {
+  if (isFileVideo({ type: mime })) {
+    // the video is played from the File object, its content is not read into memory here
+    return createVideoThumbnail(file, 200, 5);
+  }
+
+  const isImage = isFileImage({ type: mime });
+  if ((!isImage && mime !== 'application/pdf') || file.size > THUMBNAIL_SOURCE_SIZE_LIMIT) {
+    return null;
+  }
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  return isImage ? resizeImage(uint8ToDataURL(bytes, mime), 200) : createPdfThumbnail(bytes, 200);
+}
+
+/**
+ * Uploads a file from the OS into the folder. The content is streamed, so big
+ * files are not held in memory; `onProgress` reports the written bytes.
+ * A name taken in the folder gets a free variant (`name_copy.ext`, ...).
+ */
 export async function createFileBaseOnOsFileSystemFile({
   fsId,
   fs,
   uploadedFile,
   folderPath,
   withThumbnail,
+  onProgress,
 }: {
   fsId: string;
   fs: web3n.files.WritableFS;
   uploadedFile: File & { path?: string };
   folderPath: string;
   withThumbnail?: boolean;
+  onProgress?: (bytesWritten: number, totalBytes: number) => void;
 }): Promise<void> {
   const { name } = uploadedFile;
 
   try {
-    const byteArray = await getFileArray(uploadedFile);
-    if (!byteArray) {
-      throw new Error('No file uploaded');
+    // The folder may have been renamed or removed (on another device too) while it was shown.
+    // Writing by its old path would silently create a new folder with the old name.
+    if (formatPath(folderPath) && !(await fs.checkFolderPresence(folderPath))) {
+      throw new Error(`The folder '${folderPath}' does not exist: it was renamed or removed.`);
     }
 
-    const fullFilePath = `${folderPath}/${name}`;
-    const fileExt = getFileExtension(name);
-    const fileName = name.replace(`.${fileExt}`, '');
-    const isThereFileWithSameName = await fs.checkFilePresence(fullFilePath);
-    const newFullFileName = isThereFileWithSameName ? `${folderPath}/${fileName}_copy.${fileExt}` : fullFilePath;
+    const takenNames = await getFolderEntityNames(fs, folderPath);
+    const freeName = await pickFreeEntityName({ name, isTaken: candidate => takenNames.has(candidate) });
+    const newFullFileName = joinEntityPath(folderPath, freeName);
 
-    await fs.writeBytes(newFullFileName, byteArray);
+    await writeOsFile({ fs, path: newFullFileName, file: uploadedFile, onProgress });
 
-
-    if (fsId === USER_FS || USER_LOCAL_FS) {
-      const { img, ext, mime } = await createThumbnailForFileFromOs(uploadedFile, byteArray);
+    if (fsId === USER_FS || fsId === USER_LOCAL_FS) {
+      const { ext, mime } = await detectFileType(uploadedFile);
+      const img = withThumbnail
+        ? await createThumbnailForFileFromOs(uploadedFile, mime).catch(err => {
+            w3n.log('error', `Error creating a thumbnail for the ${name} file. `, err);
+            return null;
+          })
+        : null;
 
       await appStorageSrv.updateEntityXAttrs({
         fsId,
@@ -99,7 +112,7 @@ export async function createFileBaseOnOsFileSystemFile({
           id: getRandomId(24),
           ext,
           mime,
-          ...(withThumbnail && img && { thumbnail: img }),
+          ...(img && { thumbnail: img }),
         },
       });
     }

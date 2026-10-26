@@ -26,7 +26,7 @@ export async function absorbRemoteFolderChanges({
   stopErrorPropagate?: boolean;
 }): Promise<number | undefined> {
   try {
-    return fs.v?.sync?.absorbRemoteFolderChanges(path, opts);
+    return await fs.v?.sync?.absorbRemoteFolderChanges(path, opts);
   } catch (err) {
     console.log(
       `🔥 [absorbRemoteFolderChanges] Error in the process for the folder '${path}'. 'stopErrorPropagate' flag is ${stopErrorPropagate} .`,

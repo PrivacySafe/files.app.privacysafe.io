@@ -18,7 +18,6 @@
   import { computed, type ComputedRef, watch } from 'vue';
   import { storeToRefs } from 'pinia';
   import size from 'lodash/size';
-  import cloneDeep from 'lodash/cloneDeep';
   import { TaskRunner } from '@v1nt1248/3nclient-lib/utils';
   import { type Ui3nCheckboxValue, Ui3nTooltip } from '@v1nt1248/3nclient-lib';
   import type { ListingEntryExtended } from '@shared/types';
@@ -47,8 +46,8 @@
   const { setCommonLoading } = appStore;
 
   const runModeInfoStore = useRunModeInfoStore();
-  const { isDragging, isMoveMode, isMoveModeQuick } = storeToRefs(runModeInfoStore);
-  const { toggleCopyMoveMode, onDragEnd } = runModeInfoStore;
+  const { isDragging, isMoveMode, isMoveModeQuickForSelection, moveModeWindow } = storeToRefs(runModeInfoStore);
+  const { toggleCopyMoveMode } = runModeInfoStore;
 
   const currentFsFolderWindow = computed(() => (props.windowIndex ? (`${props.windowIndex}` as '1' | '2') : '1'));
 
@@ -92,7 +91,7 @@
 
   function toggleSelectedEntities(val: Ui3nCheckboxValue) {
     if (val) {
-      selectedEntities.value = cloneDeep(sortedFsFolderData.value);
+      selectedEntities.value = [...sortedFsFolderData.value];
     } else {
       selectedEntities.value = [];
     }
@@ -100,11 +99,11 @@
 
   function onSelectMultiple(index: number) {
     if (!isEmpty(selectedEntities.value)) {
-      const firstSelectedEntity = cloneDeep(selectedEntities.value[0]);
+      const firstSelectedEntity = selectedEntities.value[0];
       const firstSelectedEntityIndex = sortedFsFolderData.value.findIndex(e => e.id === firstSelectedEntity.id);
 
       if (firstSelectedEntityIndex <= index) {
-        selectedEntities.value = cloneDeep(sortedFsFolderData.value.slice(firstSelectedEntityIndex, index + 1));
+        selectedEntities.value = sortedFsFolderData.value.slice(firstSelectedEntityIndex, index + 1);
       } else {
         const newValue = [firstSelectedEntity];
 
@@ -131,6 +130,10 @@
       }
 
       if (fsIdVal !== fsIdOldVal || folderIdVal !== folderIdOldVal || pathVal !== pathOldVal) {
+        // The selection belongs to the previous folder; bulk actions must not target it.
+        clearSelection();
+        // thumbnails of the previous folder are not needed anymore
+        taskRunner.cancelTasks();
         await loadFolderData();
       }
     },
@@ -156,11 +159,11 @@
         :window-index="windowIndex"
         :is-in-split-mode="isSplittedMode"
         :selected-entities="selectedEntities"
-        :is-move-mode="isMoveMode"
-        :is-move-mode-quick="isMoveModeQuick"
+        :is-move-mode="isMoveMode && moveModeWindow === currentFsFolderWindow"
+        :is-move-mode-quick="isMoveModeQuickForSelection"
         :disabled="commonLoading"
         @action="handleBulkActions($event, selectedEntities)"
-        @update:move-mode="toggleCopyMoveMode"
+        @update:move-mode="toggleCopyMoveMode($event, currentFsFolderWindow)"
       />
     </tile-view-toolbar>
 
@@ -200,7 +203,7 @@
               @select="selectEntity"
               @select:multiple="onSelectMultiple(index)"
               @dragstart="onDragstart($event, item)"
-              @dragend="onDragEnd"
+              @dragend="onDragend"
               @dragenter="isDroppable($event, item)"
               @dragover="isDroppable($event, item)"
               @dragleave="onDragleave($event, item)"

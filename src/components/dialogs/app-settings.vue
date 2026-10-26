@@ -18,7 +18,7 @@
   import { useI18n } from 'vue-i18n';
   import { storeToRefs } from 'pinia';
   import { Ui3nDialog, Ui3nSwitch, type Ui3nDialogComponentProps, type Ui3nDialogEvent } from '@v1nt1248/3nclient-lib';
-  import { useAppStore, useFsStore } from '@/store';
+  import { useAppStore } from '@/store';
   import { useNavigation } from '@/composables/useNavigation';
   import { StorageAppSettings } from '@shared/types';
 
@@ -36,10 +36,6 @@
   const { setAppStorageSettings } = appStore;
 
   const { window1RootFolderId, window2RootFolderId, navigateToRouteSingle } = useNavigation();
-
-  const fsStore = useFsStore();
-  const { fsFolderList } = storeToRefs(fsStore);
-  console.log('fsFolderList => ', fsFolderList.value);
 
   async function changeSettingItem(field: keyof StorageAppSettings) {
     const newValue = !appStorageSettings.value[field];

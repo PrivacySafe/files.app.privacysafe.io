@@ -24,6 +24,7 @@
   import { getFileExtension, isFileImage, isFileVideo } from '@v1nt1248/3nclient-lib/utils';
   import { useDblClickHandler } from '@/composables/useDblClickHandler';
   import { useAbilities } from '@/composables/useAbilities';
+  import { useEntityNameEditing } from '@/composables/useEntityNameEditing';
   import { useAppStore, useFsStore, useSyncQueueStore } from '@/store';
   import { createThumbnail as _createThumbnail } from '@/utils';
   import type { FsFolderEntityEvent, ListingEntryExtended } from '@shared/types';
@@ -118,8 +119,10 @@
     }
   }
 
+  const { editableEl, validateName, onInvalidName, revertName } = useEntityNameEditing();
+
   function updateName(name: Nullable<string>): void {
-    emits('action', { event: 'rename', payload: { entity: props.item, newName: name } });
+    emits('action', { event: 'rename', payload: { entity: props.item, newName: name, revert: revertName } });
   }
 
   function updateFavorite() {
@@ -144,7 +147,7 @@
 
       props.taskRunner.addTask(
         async () => {
-          await _createThumbnail(props.fsId, fullPath).then((val) => {
+          await _createThumbnail(props.fsId, fullPath, props.item.version ?? props.item.mtime?.valueOf()).then((val) => {
             if (val) {
               thumbnail.value = val;
             }
@@ -231,11 +234,14 @@
       </div>
 
       <ui3n-editable
+        ref="editableEl"
         :model-value="item.name"
         disallow-empty-value
+        :validator="validateName"
         :disabled="!canRename(fsId, rootFolderId) || !!item.brokeReason"
         @toggle:edit-mode="editNameMode = $event"
         @update:model-value="updateName"
+        @invalid="onInvalidName"
       />
 
       <ui3n-icon

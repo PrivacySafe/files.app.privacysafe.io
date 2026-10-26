@@ -78,7 +78,6 @@ export const useSyncQueueStore = defineStore('sync-queue', () => {
     path: string;
     value: number | boolean;
   }) {
-    // console.log('📝 UPSERT PROCESS: ', action, path, value);
     switch (action) {
       case 'upload':
         uploadProcesses.value.set(path, { progress: value as number, lastUpdate: Date.now() });
@@ -90,14 +89,9 @@ export const useSyncQueueStore = defineStore('sync-queue', () => {
         adoptProcesses.value.set(path, value as boolean);
         break;
     }
-    // console.log(
-    //   `🚀 ${action.toUpperCase()} PROCESSING [${path}] => `,
-    //   uploadProcesses.value.get(path) || downloadProcesses.value.get(path) || adoptProcesses.value.get(path),
-    // );
   }
 
   function removeProcess({ action, path }: { action: 'upload' | 'download' | 'adoptRemote'; path: string }) {
-    // console.log('🗑 REMOVE PROCESS: ', action, path);
     switch (action) {
       case 'upload':
         uploadProcesses.value.delete(path);
@@ -109,10 +103,6 @@ export const useSyncQueueStore = defineStore('sync-queue', () => {
         adoptProcesses.value.delete(path);
         break;
     }
-    // console.log(
-    //   `🚀 ${action.toUpperCase()} PROCESSING [${path}] => `,
-    //   uploadProcesses.value.has(path) || downloadProcesses.value.has(path) || adoptProcesses.value.has(path),
-    // );
   }
 
   return {

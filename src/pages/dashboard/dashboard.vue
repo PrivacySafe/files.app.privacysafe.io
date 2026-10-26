@@ -53,7 +53,7 @@
   const { canCreateFolder, canUpload } = useAbilities();
 
   const runModeInfoStore = useRunModeInfoStore();
-  const { isDragging, isMoveMode, isMoveModeQuick } = storeToRefs(runModeInfoStore);
+  const { isDragging, effectiveMoveMode } = storeToRefs(runModeInfoStore);
   const { rootFolderSyncStatus, trashFolderSyncStatus } = storeToRefs(useSyncQueueStore());
 
   const showResolveConflictBanner = computed(
@@ -264,7 +264,7 @@
         color="var(--color-icon-table-accent-default)"
       />
 
-      {{ isMoveMode || isMoveModeQuick ? t('fs.action.moving') : t('fs.action.copying') }}
+      {{ effectiveMoveMode ? t('fs.action.moving') : t('fs.action.copying') }}
     </div>
 
     <div

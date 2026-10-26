@@ -17,33 +17,67 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type AnyFunction = (...args: any[]) => any;
 
-export function debounce<T extends AnyFunction>(fn: T, delay: number, options: { immediate?: boolean } = {}) {
+/**
+ * Debounces `fn`. With `maxWait`, a call is never postponed longer than that,
+ * even if new calls keep coming. `flush()` runs a pending call right away.
+ */
+export function debounce<T extends AnyFunction>(
+  fn: T,
+  delay: number,
+  options: { immediate?: boolean; maxWait?: number } = {},
+) {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  let maxWaitId: ReturnType<typeof setTimeout> | undefined;
+  let pendingCall: { context: any; args: Parameters<T> } | undefined;
+
+  function clearTimers() {
+    clearTimeout(timeoutId);
+    clearTimeout(maxWaitId);
+    timeoutId = undefined;
+    maxWaitId = undefined;
+  }
+
+  function invokePending() {
+    clearTimers();
+    const call = pendingCall;
+    pendingCall = undefined;
+    if (call) {
+      fn.apply(call.context, call.args);
+    }
+  }
 
   const debounced = function (this: any, ...args: Parameters<T>) {
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const context = this;
     const callNow = options.immediate && timeoutId === undefined;
 
     if (timeoutId) {
       clearTimeout(timeoutId);
     }
 
+    if (!options.immediate) {
+      pendingCall = { context: this, args };
+    }
+
     timeoutId = setTimeout(() => {
       timeoutId = undefined;
-      if (!options.immediate) {
-        fn.apply(context, args);
-      }
+      invokePending();
     }, delay);
 
+    if (options.maxWait !== undefined && maxWaitId === undefined && !options.immediate) {
+      maxWaitId = setTimeout(invokePending, options.maxWait);
+    }
+
     if (callNow) {
-      fn.apply(context, args);
+      fn.apply(this, args);
     }
   };
 
   debounced.cancel = () => {
-    clearTimeout(timeoutId);
-    timeoutId = undefined;
+    clearTimers();
+    pendingCall = undefined;
+  };
+
+  debounced.flush = () => {
+    invokePending();
   };
 
   return debounced;

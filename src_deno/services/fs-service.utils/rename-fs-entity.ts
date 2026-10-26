@@ -29,13 +29,14 @@ export async function renameFsEntity({
   entity: ListingEntryExtended;
   targetFsListItem: FsListItem;
   newName: string;
-}): Promise<void> {
+}): Promise<string | undefined> {
   try {
     const targetFolder = getParentFolderPathFromEntityFullPath(entity.fullPath);
-    await moveFsEntity({ fsListItem, entity, targetFsListItem, targetFolder, targetEntityName: newName });
+    return await moveFsEntity({ fsListItem, entity, targetFsListItem, targetFolder, targetEntityName: newName });
   } catch (e) {
     const errorMessage = `Error renaming the entity ${entity.fullPath}. `;
     console.error(errorMessage, e);
     await w3n.log!('error', errorMessage, e);
+    return undefined;
   }
 }

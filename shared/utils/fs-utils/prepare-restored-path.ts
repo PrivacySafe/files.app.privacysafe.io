@@ -16,9 +16,18 @@
 */
 /// <reference path="../../../@types/platform-defs/injected-w3n.d.ts" />
 import type { ListingEntryExtended } from '../../../shared/types/index.ts';
-import { formatPath, getFileExtension } from '../../../shared/utils/various.ts';
+import { formatPath } from '../../../shared/utils/various.ts';
 import { getListFolder } from './get-list-folder.ts';
+import { isSafeRelativePath, isValidEntityName, joinEntityPath, pickFreeEntityName } from './entity-name.ts';
 
+export type RestoreConflict = Pick<ListingEntryExtended, 'fullPath' | 'name' | 'type'>;
+
+/**
+ * Computes where a trashed entity goes back to.
+ * - 'keep': a free name next to the existing entities (`name_copy.ext`, ...);
+ * - 'replace': the original name; `conflict` is the existing entity that has
+ *   to be removed before the restored one can take its place.
+ */
 export async function prepareRestoredPath({
   fs,
   entity,
@@ -27,38 +36,38 @@ export async function prepareRestoredPath({
   fs: web3n.files.WritableFS;
   entity: ListingEntryExtended;
   mode: 'keep' | 'replace';
-}): Promise<{ restoredPath: string; toDelete: boolean }> {
-  const { parentFolder, originalName } = entity;
+}): Promise<{ restoredPath: string; conflict?: RestoreConflict }> {
+  // the original location comes from xattrs and is untrusted: an invalid one restores into the root
+  const parentFolder = isSafeRelativePath(formatPath(entity.parentFolder ?? ''))
+    ? formatPath(entity.parentFolder ?? '')
+    : '';
+  const originalName = isValidEntityName(entity.originalName) ? entity.originalName : entity.name;
 
   const parentFolderList =
-    (await getListFolder({ fs, folderName: parentFolder!, vAPI: false, stopErrorPropagate: true })) || [];
-  const parentFolderEntitiesNames = parentFolderList.map(item => item.name);
+    (await getListFolder({ fs, folderName: parentFolder, vAPI: false, stopErrorPropagate: true })) || [];
 
   if (mode === 'keep') {
-    const result: { restoredPath: string; toDelete: boolean } = {
-      restoredPath: '',
-      toDelete: false,
-    };
+    const takenNames = new Set(parentFolderList.map(item => item.name));
+    const freeName = await pickFreeEntityName({
+      name: originalName,
+      isFolder: entity.type === 'folder',
+      isTaken: candidate => takenNames.has(candidate),
+    });
+    return { restoredPath: joinEntityPath(parentFolder, freeName) };
+  }
 
-    const fileExt = getFileExtension(originalName);
-    let fileName = originalName!.replace(`.${fileExt}`, '');
-    let tmpFullName = `${fileName}.${fileExt}`;
-
-    while (result.restoredPath === '') {
-      const isEntityWithSameName = parentFolderEntitiesNames.includes(tmpFullName);
-      if (isEntityWithSameName) {
-        fileName = `${fileName}_copy`;
-        tmpFullName = `${fileName}.${fileExt}`;
-      } else {
-        result.restoredPath = formatPath(`${parentFolder}/${tmpFullName}`);
-      }
-    }
-
-    return result;
+  const restoredPath = joinEntityPath(parentFolder, originalName);
+  const existing = parentFolderList.find(item => item.name === originalName);
+  if (!existing) {
+    return { restoredPath };
   }
 
   return {
-    restoredPath: formatPath(`${parentFolder!}/${originalName!}`),
-    toDelete: parentFolderEntitiesNames.includes(originalName!),
+    restoredPath,
+    conflict: {
+      fullPath: restoredPath,
+      name: originalName,
+      type: existing.isFolder ? 'folder' : existing.isLink ? 'link' : 'file',
+    },
   };
 }

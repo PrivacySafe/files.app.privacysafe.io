@@ -39,7 +39,6 @@
   import { makeLogger } from '@shared/utils/logger';
 
   const props = defineProps<{
-    /** Tells whether the name is taken in the folder of the new link. */
     checkNameTaken?: (name: string) => Promise<boolean>;
     dialogProps?: Ui3nDialogComponentProps<CreateLinkDialogData>;
   }>();
@@ -213,11 +212,17 @@
             direction="horizontal"
             @update:model-value="changeTargetType"
           >
-            <ui3n-radio checked-value="folder">
+            <ui3n-radio
+              checked-value="folder"
+              size="20"
+            >
               {{ t('dialog.create_link.type.folder') }}
             </ui3n-radio>
 
-            <ui3n-radio checked-value="file">
+            <ui3n-radio
+              checked-value="file"
+              size="20"
+            >
               {{ t('dialog.create_link.type.file') }}
             </ui3n-radio>
           </ui3n-radio-group>
@@ -269,6 +274,12 @@
     display: flex;
     flex-direction: column;
     row-gap: var(--spacing-s);
+
+    div[data-ui3n='radio'] {
+      div[class*='body'] {
+        color: var(--color-icon-block-primary-default);
+      }
+    }
   }
 
   .label {

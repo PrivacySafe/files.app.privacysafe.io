@@ -28,7 +28,7 @@ import { appStorageSrv } from '@/services/services-provider';
 import { ENTITY_ICON_XATTR } from '@/utils/entity-icon';
 import { getEntityNameAndParent } from '@shared/utils/fs-utils/get-entity-name-and-parent';
 import type { AppGlobalEvents, ListingEntryExtended } from '@shared/types';
-import type { EntityIconDialogData, EntityIconDialogEvent } from '@/components/dialogs/entity-icon-dialog.types';
+import type { EntityIconDialogData, EntityIconDialogEvent } from '@/components/dialogs/entity-icon-dialog.vue';
 import { makeLogger } from '@shared/utils/logger';
 
 const log = makeLogger('EntityIcon');

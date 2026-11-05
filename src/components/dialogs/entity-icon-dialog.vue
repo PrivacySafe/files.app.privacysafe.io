@@ -35,8 +35,13 @@
     type Ui3nDialogEvent,
   } from '@v1nt1248/3nclient-lib';
   import { makeEntityIcon } from '@/utils/entity-icon';
-  import type { EntityIconDialogData, EntityIconDialogEvent } from './entity-icon-dialog.types';
   import { makeLogger } from '@shared/utils/logger';
+
+  export type EntityIconDialogEvent = 'delete';
+
+  export interface EntityIconDialogData {
+    icon: string;
+  }
 
   const props = defineProps<{
     icon?: string;
